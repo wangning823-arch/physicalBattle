@@ -10,6 +10,9 @@ class PhysicsEngine {
         this.effects = [];
         this.tempEffects = []; // 临时特效（短时间，如攻击特效）
         this.rigidConstraint = null; // 保存刚性约束
+        this.softRopeConstraint = null; // 保存软绳约束
+        this.softRopeOriginalLength = 0; // 软绳原长
+        this.isSoftRopeLocked = false; // 软绳是否已锁定
         this.createArena();
     }
 
@@ -36,9 +39,19 @@ class PhysicsEngine {
         // 检查是否有刚性约束效果需要处理
         const rigidEffect = this.effects.find(e => e.type === 'rigid_constraint');
         if (!rigidEffect && this.rigidConstraint) {
-            // 没有刚性约束效果了，移除约束
             Matter.World.remove(this.world, this.rigidConstraint);
             this.rigidConstraint = null;
+        }
+        
+        // 检查是否有软绳约束效果需要处理
+        const softRopeEffect = this.effects.find(e => e.type === 'soft_rope');
+        if (!softRopeEffect) {
+            if (this.softRopeConstraint) {
+                Matter.World.remove(this.world, this.softRopeConstraint);
+                this.softRopeConstraint = null;
+            }
+            this.softRopeOriginalLength = 0;
+            this.isSoftRopeLocked = false;
         }
     }
 
@@ -73,6 +86,32 @@ class PhysicsEngine {
         this.effects.push({
             type: 'rigid_constraint',
             duration: duration
+        });
+    }
+
+    /**
+     * 创建软绳约束
+     */
+    createSoftRope(duration) {
+        if (this.players.length < 2) return;
+        
+        // 如果已经有软绳约束，先移除
+        if (this.softRopeConstraint) {
+            Matter.World.remove(this.world, this.softRopeConstraint);
+            this.softRopeConstraint = null;
+        }
+        
+        // 计算并保存初始距离（原长）
+        const dx = this.players[1].position.x - this.players[0].position.x;
+        const dy = this.players[1].position.y - this.players[0].position.y;
+        this.softRopeOriginalLength = Math.sqrt(dx * dx + dy * dy);
+        this.isSoftRopeLocked = false;
+        
+        // 添加到效果列表
+        this.effects.push({
+            type: 'soft_rope',
+            duration: duration,
+            originalLength: this.softRopeOriginalLength
         });
     }
 
@@ -144,7 +183,30 @@ class PhysicsEngine {
 
     processEffects() {
         this.effects.forEach(effect => {
-            if (effect.type === 'gravityField' || effect.type === 'repulsionField') {
+            // 处理软绳约束
+            if (effect.type === 'soft_rope' && this.players.length >= 2) {
+                const dx = this.players[1].position.x - this.players[0].position.x;
+                const dy = this.players[1].position.y - this.players[0].position.y;
+                const currentDist = Math.sqrt(dx * dx + dy * dy);
+                
+                // 检查是否超过原长
+                if (currentDist > this.softRopeOriginalLength && !this.isSoftRopeLocked) {
+                    // 超过原长，立即锁定为刚性约束
+                    this.isSoftRopeLocked = true;
+                    
+                    // 创建约束
+                    this.softRopeConstraint = Matter.Constraint.create({
+                        bodyA: this.players[0],
+                        bodyB: this.players[1],
+                        stiffness: 0.95,
+                        length: this.softRopeOriginalLength,
+                        damping: 0.1
+                    });
+                    
+                    Matter.World.add(this.world, this.softRopeConstraint);
+                }
+            }
+            else if (effect.type === 'gravityField' || effect.type === 'repulsionField') {
                 this.players.forEach(player => {
                     const dx = effect.x - player.position.x;
                     const dy = effect.y - player.position.y;
@@ -239,6 +301,13 @@ class PhysicsEngine {
             Matter.World.remove(this.world, this.rigidConstraint);
             this.rigidConstraint = null;
         }
+        // 移除软绳约束
+        if (this.softRopeConstraint) {
+            Matter.World.remove(this.world, this.softRopeConstraint);
+            this.softRopeConstraint = null;
+        }
+        this.softRopeOriginalLength = 0;
+        this.isSoftRopeLocked = false;
         // 移除玩家
         this.players.forEach(p => Matter.World.remove(this.world, p));
         this.players = [];

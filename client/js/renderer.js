@@ -226,6 +226,68 @@ class Renderer {
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText('🔗', midX, midY);
+            } else if (effect.type === 'soft_rope' && players && players.length >= 2) {
+                // 绘制软绳约束效果
+                const p1 = players[0];
+                const p2 = players[1];
+                const x1 = this.centerX + p1.position.x;
+                const y1 = this.centerY + p1.position.y;
+                const x2 = this.centerX + p2.position.x;
+                const y2 = this.centerY + p2.position.y;
+                
+                // 检查游戏状态是否有软绳锁定信息
+                // 这里我们通过距离来判断
+                const currentDist = Math.sqrt((p2.position.x - p1.position.x) ** 2 + (p2.position.y - p1.position.y) ** 2);
+                const originalLength = effect.originalLength || 100;
+                const isLocked = currentDist >= originalLength * 0.99; // 接近或超过原长视为锁定
+                
+                // 绘制连接线
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                
+                if (isLocked) {
+                    // 锁定状态：金色实线
+                    ctx.strokeStyle = '#FFD700';
+                    ctx.lineWidth = 5;
+                    ctx.setLineDash([]);
+                } else {
+                    // 未锁定状态：浅蓝色虚线
+                    ctx.strokeStyle = '#87CEEB';
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([8, 8]);
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+                // 绘制连接点
+                const pointColor = isLocked ? '#FFD700' : '#87CEEB';
+                ctx.beginPath();
+                ctx.arc(x1, y1, 8, 0, Math.PI * 2);
+                ctx.fillStyle = pointColor;
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(x2, y2, 8, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 在中间绘制图标
+                const midX = (x1 + x2) / 2;
+                const midY = (y1 + y2) / 2;
+                ctx.font = isLocked ? '22px sans-serif' : '20px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(isLocked ? '🔗' : '🪢', midX, midY);
+                
+                // 未锁定时，显示原长距离指示器（虚线圆）
+                if (!isLocked) {
+                    ctx.beginPath();
+                    ctx.arc(x1, y1, originalLength, 0, Math.PI * 2);
+                    ctx.strokeStyle = 'rgba(135, 206, 235, 0.4)';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 10]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
             }
             ctx.restore();
         });
@@ -334,13 +396,92 @@ class Renderer {
                     ctx.fillStyle = `rgba(238, 130, 238, ${alpha})`;
                     ctx.fill();
                 }
+            } else if (effect.type === 'heat_engine_blast') {
+                // 🔥 热机超级爆炸特效！
+                const x = this.centerX + (effect.x || 0);
+                const y = this.centerY + (effect.y || 0);
+                const alpha = progress;
+                
+                // 1. 超亮的核心白光
+                const coreRadius = 60 * progress;
+                const coreGradient = ctx.createRadialGradient(x, y, 0, x, y, coreRadius);
+                coreGradient.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
+                coreGradient.addColorStop(0.3, `rgba(255, 200, 100, ${alpha * 0.8})`);
+                coreGradient.addColorStop(1, `rgba(255, 100, 0, 0)`);
+                ctx.beginPath();
+                ctx.arc(x, y, coreRadius, 0, Math.PI * 2);
+                ctx.fillStyle = coreGradient;
+                ctx.fill();
+                
+                // 2. 多层冲击波环
+                for (let wave = 0; wave < 4; wave++) {
+                    const waveRadius = 40 + wave * 40 + (1 - progress) * 80;
+                    const waveAlpha = alpha * (1 - wave * 0.2);
+                    const waveWidth = 8 - wave * 1.5;
+                    
+                    ctx.beginPath();
+                    ctx.arc(x, y, waveRadius, 0, Math.PI * 2);
+                    ctx.strokeStyle = `rgba(255, ${150 - wave * 30}, 0, ${waveAlpha})`;
+                    ctx.lineWidth = waveWidth;
+                    ctx.stroke();
+                }
+                
+                // 3. 火焰粒子 - 40个粒子！
+                for (let i = 0; i < 40; i++) {
+                    const angle = (i / 40) * Math.PI * 2;
+                    const speed = 150 + Math.random() * 100;
+                    const dist = speed * (1 - progress);
+                    const px = x + Math.cos(angle) * dist;
+                    const py = y + Math.sin(angle) * dist;
+                    const particleSize = 4 + Math.random() * 4;
+                    
+                    // 随机颜色：黄色 -> 橙色 -> 红色 -> 暗红
+                    const colors = [
+                        `rgba(255, 255, 0, ${alpha})`,
+                        `rgba(255, 200, 0, ${alpha})`,
+                        `rgba(255, 100, 0, ${alpha})`,
+                        `rgba(255, 50, 0, ${alpha * 0.8})`
+                    ];
+                    const color = colors[Math.floor(Math.random() * colors.length)];
+                    
+                    ctx.beginPath();
+                    ctx.arc(px, py, particleSize * progress, 0, Math.PI * 2);
+                    ctx.fillStyle = color;
+                    ctx.fill();
+                }
+                
+                // 4. 火花粒子 - 20个快速移动的小火花
+                for (let i = 0; i < 20; i++) {
+                    const angle = (i / 20) * Math.PI * 2 + Math.random() * 0.5;
+                    const speed = 200 + Math.random() * 150;
+                    const dist = speed * (1 - progress);
+                    const px = x + Math.cos(angle) * dist;
+                    const py = y + Math.sin(angle) * dist;
+                    
+                    ctx.beginPath();
+                    ctx.arc(px, py, 2 * progress, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 200, ${alpha * 0.8})`;
+                    ctx.fill();
+                }
+                
+                // 5. 地面灼烧效果
+                if (progress > 0.5) {
+                    const burnRadius = 100 * progress;
+                    const burnGradient = ctx.createRadialGradient(x, y, 0, x, y, burnRadius);
+                    burnGradient.addColorStop(0, `rgba(100, 0, 0, ${(progress - 0.5) * 0.5})`);
+                    burnGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                    ctx.beginPath();
+                    ctx.arc(x, y, burnRadius, 0, Math.PI * 2);
+                    ctx.fillStyle = burnGradient;
+                    ctx.fill();
+                }
             }
             
             ctx.restore();
         });
     }
 
-    drawAimingLine(player, target) {
+    drawAimingLine(player, target, gameState = null) {
         if (!player || !target) return;
         const ctx = this.ctx;
         const startX = this.centerX + player.position.x;
@@ -348,9 +489,22 @@ class Renderer {
         const endX = this.centerX + target.x;
         const endY = this.centerY + target.y;
         
+        // 检查目标位置是否在场地内
+        let isValid = true;
+        if (gameState && gameState.arenaRadius) {
+            const targetDist = Math.sqrt(target.x ** 2 + target.y ** 2);
+            // 默认最大半径
+            let maxAllowedRadius = gameState.arenaRadius;
+            
+            // 如果我们知道正在放置领域类卡牌，应该考虑领域半径
+            // 这里我们通过 gameState 暂时无法获取卡牌信息，先做简单检查
+            // 至少保证中心在场地内
+            isValid = targetDist <= maxAllowedRadius;
+        }
+        
         ctx.save();
         ctx.setLineDash([10, 5]);
-        ctx.strokeStyle = '#FFD700';
+        ctx.strokeStyle = isValid ? '#FFD700' : '#FF0000';
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.moveTo(startX, startY);
@@ -359,12 +513,21 @@ class Renderer {
         
         ctx.beginPath();
         ctx.arc(endX, endY, 15, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
+        ctx.fillStyle = isValid ? 'rgba(255, 215, 0, 0.3)' : 'rgba(255, 0, 0, 0.3)';
         ctx.fill();
-        ctx.strokeStyle = '#FFD700';
+        ctx.strokeStyle = isValid ? '#FFD700' : '#FF0000';
         ctx.lineWidth = 2;
         ctx.setLineDash([]);
         ctx.stroke();
+        
+        // 如果无效，显示提示文字
+        if (!isValid) {
+            ctx.fillStyle = '#FF0000';
+            ctx.font = 'bold 16px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText('不能放在场地外！', endX, endY - 25);
+        }
         
         ctx.restore();
     }
@@ -406,7 +569,7 @@ class Renderer {
             this.drawTempEffects(gameState.tempEffects);
         }
         if (aimingTarget && currentPlayerPhysics) {
-            this.drawAimingLine(currentPlayerPhysics, aimingTarget);
+            this.drawAimingLine(currentPlayerPhysics, aimingTarget, gameState);
         }
         if (playersToDraw && playersToDraw[0]) {
             this.drawFallWarning(playersToDraw[0], gameState.arenaRadius);

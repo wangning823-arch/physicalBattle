@@ -80,6 +80,22 @@ class Game {
         const { card, cardIndex, playerId } = this.aimingState;
         const player = this.players.find(p => p.id === playerId);
         
+        // 检查目标位置是否在圆形场地内
+        // 如果是领域类卡牌，还要考虑领域自身的半径
+        let maxAllowedRadius = GAME_CONFIG.ARENA_RADIUS;
+        if (card.effect.radius) {
+            // 确保领域完全在场地内
+            maxAllowedRadius = GAME_CONFIG.ARENA_RADIUS - card.effect.radius;
+            // 防止负数
+            maxAllowedRadius = Math.max(0, maxAllowedRadius);
+        }
+        
+        const targetDist = Math.sqrt(targetX ** 2 + targetY ** 2);
+        if (targetDist > maxAllowedRadius) {
+            console.log('目标位置在场地外，无法放置！');
+            return false;
+        }
+        
         player.energy -= card.cost;
         this.lastPlayedCard = card;
         this.executeCard(card, playerId, { x: targetX, y: targetY });
@@ -100,10 +116,10 @@ class Game {
         const targetPhysics = this.physics.getPlayer(targetId);
         const targetPlayer = this.players.find(p => p.id === targetId);
         
-        // 热机充能功能：暂时禁用自动充能，避免问题
-        // if (card.id !== 'heat_engine' && selfPlayer.heatEngine && selfPlayer.heatEngine.active) {
-        //     selfPlayer.heatEngine.charge = Math.min(selfPlayer.heatEngine.maxCharge, selfPlayer.heatEngine.charge + 1);
-        // }
+        // 热机充能功能：使用卡牌时（非热机本身）自动充能
+        if (card.id !== 'heat_engine' && selfPlayer.heatEngine && selfPlayer.heatEngine.active) {
+            selfPlayer.heatEngine.charge = Math.min(selfPlayer.heatEngine.maxCharge, selfPlayer.heatEngine.charge + 1);
+        }
         
         // 如果目标处于量子叠加态，卡牌无效
         if (targetPlayer && targetPlayer.quantumState !== null && 
@@ -237,6 +253,11 @@ class Game {
                     this.physics.createRigidConnection(card.effect.duration);
                 }
                 break;
+            case 'soft_rope':
+                if (selfPlayer) {
+                    this.physics.createSoftRope(card.effect.duration);
+                }
+                break;
             case 'damping_field':
                 if (aimTarget) {
                     this.physics.addEffect({
@@ -290,18 +311,16 @@ class Game {
                 }
                 break;
             case 'heat_engine':
-                console.log('=== 激活热机 ===');
-                console.log('玩家ID:', playerId);
                 // 激活热机
                 selfPlayer.heatEngine = {
                     active: true,
                     charge: 0,
                     maxCharge: 4,
-                    duration: 2,
-                    impulseMultiplier: 3,
-                    ownerId: playerId
+                    duration: 3, // 3个回合有效期：使用回合 + 2个完整回合
+                    ownerTurnsRemaining: 3, // 明确跟踪属于热机拥有者的剩余回合数
+                    ownerId: playerId,
+                    impulseMultiplier: 3
                 };
-                console.log('热机状态:', selfPlayer.heatEngine);
                 // 添加热机特效
                 if (selfPhysics) {
                     this.physics.addTempEffect({
@@ -338,7 +357,19 @@ class Game {
             // 弃牌阶段结束，进入该玩家的出牌阶段
             this.turnPhase = 'play';
         } else {
-            // 出牌阶段结束
+            // 出牌阶段结束，先检查是否是热机拥有者的回合结束
+            const currentPlayer = this.players[this.currentPlayerIndex];
+            if (currentPlayer.heatEngine && currentPlayer.heatEngine.active) {
+                // 热机拥有者的回合结束了，减少剩余回合数
+                currentPlayer.heatEngine.ownerTurnsRemaining--;
+                currentPlayer.heatEngine.duration = currentPlayer.heatEngine.ownerTurnsRemaining;
+                
+                if (currentPlayer.heatEngine.ownerTurnsRemaining <= 0) {
+                    // 热机持续时间结束，结算
+                    this.settleHeatEngine(currentPlayer);
+                }
+            }
+            
             if (this.currentPlayerIndex === 0) {
                 // 玩家一出牌结束，轮到玩家二
                 this.currentPlayerIndex = 1;
@@ -374,16 +405,6 @@ class Game {
                         );
                     }
                     this.processPlayerEffects(player);
-                    
-                    // 处理热机
-                    if (player.heatEngine && player.heatEngine.active) {
-                        player.heatEngine.duration--;
-                        
-                        if (player.heatEngine.duration <= 0) {
-                            // 热机持续时间结束，结算
-                            this.settleHeatEngine(player);
-                        }
-                    }
                     
                     // 更新电荷持续时间
                     if (player.chargeDuration > 0) {
@@ -421,6 +442,44 @@ class Game {
         player.quantumState = null; // 恢复正常
     }
     
+    // 手动发射热机
+    fireHeatEngine(playerId) {
+        const player = this.players.find(p => p.id === playerId);
+        if (!player || !player.heatEngine || !player.heatEngine.active) return false;
+        if (player.heatEngine.charge < player.heatEngine.maxCharge) return false;
+        
+        const heatEngine = player.heatEngine;
+        const selfPhysics = this.physics.getPlayer(player.id);
+        const targetId = player.id === 1 ? 2 : 1;
+        const targetPhysics = this.physics.getPlayer(targetId);
+        
+        // 释放3倍动量冲击
+        if (targetPhysics && selfPhysics) {
+            const dx = targetPhysics.position.x - selfPhysics.position.x;
+            const dy = targetPhysics.position.y - selfPhysics.position.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > 0) {
+                const impulse = 180 * heatEngine.impulseMultiplier; // 3×动量冲击
+                const impulseX = (dx / dist) * impulse;
+                const impulseY = (dy / dist) * impulse;
+                this.physics.applyImpulse(targetId, impulseX, impulseY);
+                
+                // 添加热机爆发特效 - 更壮观的特效！
+                this.physics.addTempEffect({
+                    type: 'heat_engine_blast',
+                    x: targetPhysics.position.x,
+                    y: targetPhysics.position.y,
+                    life: 1500,
+                    maxLife: 1500
+                });
+            }
+        }
+        
+        // 发射后移除热机
+        player.heatEngine = null;
+        return true;
+    }
+
     // 热机结算
     settleHeatEngine(player) {
         const heatEngine = player.heatEngine;
@@ -442,13 +501,13 @@ class Game {
                     const impulseY = (dy / dist) * impulse;
                     this.physics.applyImpulse(targetId, impulseX, impulseY);
                     
-                    // 添加热机爆发特效
+                    // 添加热机爆发特效 - 更壮观的特效！
                     this.physics.addTempEffect({
                         type: 'heat_engine_blast',
                         x: targetPhysics.position.x,
                         y: targetPhysics.position.y,
-                        life: 1000,
-                        maxLife: 1000
+                        life: 1500,
+                        maxLife: 1500
                     });
                 }
             }

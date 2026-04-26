@@ -29,9 +29,6 @@ const GameUI = {
     },
 
     setupEventListeners() {
-        // 保存GameUI引用到window，供测试函数使用
-        window.gameUI = this;
-        
         document.getElementById('end-turn-btn').addEventListener('click', () => {
             console.log('End turn button clicked');
             if (this.game.aimingState.active) {
@@ -152,8 +149,11 @@ const GameUI = {
         if (this.game.aimingState.active) {
             endTurnBtn.textContent = '取消瞄准';
         } else {
-            endTurnBtn.textContent = '结束回合';
+            endTurnBtn.textContent = '完成出牌';
         }
+        
+
+        
         console.log('========== updateUI() 完成 ==========');
     },
     
@@ -194,81 +194,148 @@ const GameUI = {
     
     // 更新热机显示
     updateHeatEngineDisplay() {
-        console.log('>>> updateHeatEngineDisplay() 被调用');
         const self = this;
         
         this.game.players.forEach((player) => {
-            console.log(`  检查玩家 ${player.id}:`, player);
             const displayEl = document.getElementById(`player${player.id}-heat-engine`);
-            console.log(`  displayElement found:`, !!displayEl);
             if (!displayEl) return;
             
             if (player.heatEngine && player.heatEngine.active) {
                 const chargePercent = (player.heatEngine.charge / player.heatEngine.maxCharge) * 100;
                 const isCurrentPlayer = this.game.currentPlayerIndex === player.id - 1;
                 const canCharge = isCurrentPlayer && 
-                                  this.game.turnPhase === 'play' && 
                                   player.energy >= 1 && 
                                   player.heatEngine.charge < player.heatEngine.maxCharge;
+                const canFire = isCurrentPlayer && 
+                                player.heatEngine.charge >= player.heatEngine.maxCharge;
                 
-                // 清空容器
-                displayEl.innerHTML = '';
-                
-                // 创建热机容器
-                const container = document.createElement('div');
-                container.style.cssText = 'margin-top: 8px; padding: 8px; background: linear-gradient(135deg, #1a0a00, #2a1500); border-radius: 8px; border: 2px solid #FF6B35;';
-                
-                // 标题
-                const title = document.createElement('div');
-                title.style.cssText = 'font-weight: bold; color: #FF6B35; font-size: 14px; margin-bottom: 6px;';
-                title.textContent = '⚙️🔥 热机';
-                container.appendChild(title);
-                
-                // 进度条区域
-                const progressRow = document.createElement('div');
-                progressRow.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 6px;';
-                
-                const progressBg = document.createElement('div');
-                progressBg.style.cssText = 'flex-grow: 1; background: #333; border-radius: 4px; overflow: hidden; height: 12px;';
-                
-                const progressFill = document.createElement('div');
-                progressFill.style.cssText = `background: linear-gradient(90deg, #FF6B35, #FFA500, #FFFF00); width: ${chargePercent}%; height: 100%; transition: width 0.3s;`;
-                progressBg.appendChild(progressFill);
-                progressRow.appendChild(progressBg);
-                
-                const chargeText = document.createElement('span');
-                chargeText.style.cssText = 'color: #FFA500; font-size: 12px; white-space: nowrap;';
-                chargeText.textContent = `${player.heatEngine.charge}/${player.heatEngine.maxCharge}`;
-                progressRow.appendChild(chargeText);
-                container.appendChild(progressRow);
-                
-                // 剩余回合
-                const durationText = document.createElement('div');
-                durationText.style.cssText = 'font-size: 11px; color: #aaa; margin-bottom: 8px;';
-                durationText.textContent = `剩余回合: ${player.heatEngine.duration}`;
-                container.appendChild(durationText);
-                
-                // 充能按钮
-                if (canCharge) {
-                    const btn = document.createElement('button');
-                    btn.style.cssText = 'width: 100%; padding: 6px 12px; background: linear-gradient(135deg, #FF6B35, #FF4500); border: none; border-radius: 6px; color: white; font-weight: bold; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;';
-                    btn.textContent = '⚡ 充能 (-1能量)';
-                    btn.addEventListener('click', () => {
-                        console.log('充能按钮被点击，玩家ID:', player.id);
-                        self.chargeHeatEngine(player.id);
+                // 检查是否需要创建新的热机容器，或者只更新现有内容
+                let container = displayEl.querySelector('.heat-engine-container');
+                if (!container) {
+                    // 清空容器
+                    displayEl.innerHTML = '';
+                    
+                    // 创建热机容器
+                    container = document.createElement('div');
+                    container.className = 'heat-engine-container';
+                    container.style.cssText = 'margin-top: 8px; padding: 8px; background: linear-gradient(135deg, #1a0a00, #2a1500); border-radius: 8px; border: 2px solid #FF6B35;';
+                    
+                    // 标题
+                    const title = document.createElement('div');
+                    title.style.cssText = 'font-weight: bold; color: #FF6B35; font-size: 14px; margin-bottom: 6px;';
+                    title.textContent = '⚙️🔥 热机';
+                    container.appendChild(title);
+                    
+                    // 进度条区域
+                    const progressRow = document.createElement('div');
+                    progressRow.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 6px;';
+                    
+                    const progressBg = document.createElement('div');
+                    progressBg.style.cssText = 'flex-grow: 1; background: #333; border-radius: 4px; overflow: hidden; height: 12px;';
+                    
+                    const progressFill = document.createElement('div');
+                    progressFill.className = 'heat-engine-progress';
+                    progressFill.style.cssText = `background: linear-gradient(90deg, #FF6B35, #FFA500, #FFFF00); width: ${chargePercent}%; height: 100%; transition: width 0.3s;`;
+                    progressBg.appendChild(progressFill);
+                    progressRow.appendChild(progressBg);
+                    
+                    const chargeText = document.createElement('span');
+                    chargeText.className = 'heat-engine-charge-text';
+                    chargeText.style.cssText = 'color: #FFA500; font-size: 12px; white-space: nowrap;';
+                    chargeText.textContent = `${player.heatEngine.charge}/${player.heatEngine.maxCharge}`;
+                    progressRow.appendChild(chargeText);
+                    container.appendChild(progressRow);
+                    
+                    // 剩余回合
+                    const durationText = document.createElement('div');
+                    durationText.className = 'heat-engine-duration';
+                    durationText.style.cssText = 'font-size: 11px; color: #aaa; margin-bottom: 8px;';
+                    durationText.textContent = `剩余回合: ${player.heatEngine.duration}`;
+                    container.appendChild(durationText);
+                    
+                    // 充能按钮
+                    const chargeBtn = document.createElement('button');
+                    chargeBtn.className = 'heat-engine-charge-btn';
+                    chargeBtn.style.cssText = 'width: 100%; padding: 6px 12px; background: linear-gradient(135deg, #FF6B35, #FF4500); border: none; border-radius: 6px; color: white; font-weight: bold; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s; display: none;';
+                    chargeBtn.textContent = '⚡ 充能 (-1能量)';
+                    chargeBtn.dataset.playerId = player.id;
+                    chargeBtn.addEventListener('click', (e) => {
+                        const pid = parseInt(e.target.dataset.playerId);
+                        console.log('充能按钮被点击，玩家ID:', pid);
+                        self.chargeHeatEngine(pid);
                     });
-                    btn.addEventListener('mouseover', () => {
-                        btn.style.transform = 'scale(1.05)';
-                        btn.style.boxShadow = '0 0 15px rgba(255, 107, 53, 0.6)';
+                    chargeBtn.addEventListener('mouseover', (e) => {
+                        if (!e.target.disabled) {
+                            e.target.style.transform = 'scale(1.05)';
+                            e.target.style.boxShadow = '0 0 15px rgba(255, 107, 53, 0.6)';
+                        }
                     });
-                    btn.addEventListener('mouseout', () => {
-                        btn.style.transform = 'scale(1)';
-                        btn.style.boxShadow = 'none';
+                    chargeBtn.addEventListener('mouseout', (e) => {
+                        e.target.style.transform = 'scale(1)';
+                        e.target.style.boxShadow = 'none';
                     });
-                    container.appendChild(btn);
+                    container.appendChild(chargeBtn);
+                    
+                    // 发射按钮
+                    const fireBtn = document.createElement('button');
+                    fireBtn.className = 'heat-engine-fire-btn';
+                    fireBtn.style.cssText = 'width: 100%; padding: 6px 12px; background: linear-gradient(135deg, #FFD700, #FF8C00); border: none; border-radius: 6px; color: white; font-weight: bold; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s; display: none;';
+                    fireBtn.textContent = '🔥 发射！';
+                    fireBtn.dataset.playerId = player.id;
+                    fireBtn.addEventListener('click', (e) => {
+                        const pid = parseInt(e.target.dataset.playerId);
+                        console.log('发射按钮被点击，玩家ID:', pid);
+                        self.fireHeatEngine(pid);
+                    });
+                    fireBtn.addEventListener('mouseover', (e) => {
+                        if (!e.target.disabled) {
+                            e.target.style.transform = 'scale(1.05)';
+                            e.target.style.boxShadow = '0 0 15px rgba(255, 215, 0, 0.8)';
+                        }
+                    });
+                    fireBtn.addEventListener('mouseout', (e) => {
+                        e.target.style.transform = 'scale(1)';
+                        e.target.style.boxShadow = 'none';
+                    });
+                    container.appendChild(fireBtn);
+                    
+                    displayEl.appendChild(container);
                 }
                 
-                displayEl.appendChild(container);
+                // 更新现有内容
+                const progressFill = container.querySelector('.heat-engine-progress');
+                const chargeText = container.querySelector('.heat-engine-charge-text');
+                const durationText = container.querySelector('.heat-engine-duration');
+                const chargeBtn = container.querySelector('.heat-engine-charge-btn');
+                const fireBtn = container.querySelector('.heat-engine-fire-btn');
+                
+                if (progressFill) {
+                    progressFill.style.width = `${chargePercent}%`;
+                }
+                if (chargeText) {
+                    chargeText.textContent = `${player.heatEngine.charge}/${player.heatEngine.maxCharge}`;
+                }
+                if (durationText) {
+                    durationText.textContent = `剩余回合: ${player.heatEngine.duration}`;
+                }
+                if (chargeBtn) {
+                    if (canCharge) {
+                        chargeBtn.style.display = 'block';
+                        chargeBtn.disabled = false;
+                        chargeBtn.style.opacity = '1';
+                    } else {
+                        chargeBtn.style.display = 'none';
+                    }
+                }
+                if (fireBtn) {
+                    if (canFire) {
+                        fireBtn.style.display = 'block';
+                        fireBtn.disabled = false;
+                        fireBtn.style.opacity = '1';
+                    } else {
+                        fireBtn.style.display = 'none';
+                    }
+                }
             } else {
                 displayEl.innerHTML = '';
             }
@@ -277,39 +344,23 @@ const GameUI = {
     
     // 手动充能热机
     chargeHeatEngine(playerId) {
-        console.log('=== 尝试充能热机 ===');
-        console.log('玩家ID:', playerId);
-        
         const player = this.game.players.find(p => p.id === playerId);
-        console.log('找到玩家:', player);
         
-        if (!player) {
-            console.log('未找到玩家');
-            return;
-        }
-        if (!player.heatEngine) {
-            console.log('玩家没有热机');
-            return;
-        }
-        if (!player.heatEngine.active) {
-            console.log('热机未激活');
-            return;
-        }
-        if (player.energy < 1) {
-            console.log('能量不足:', player.energy);
-            return;
-        }
-        if (player.heatEngine.charge >= player.heatEngine.maxCharge) {
-            console.log('已充满:', player.heatEngine.charge, '/', player.heatEngine.maxCharge);
-            return;
-        }
+        if (!player || !player.heatEngine || !player.heatEngine.active) return;
+        if (player.energy < 1 || player.heatEngine.charge >= player.heatEngine.maxCharge) return;
         
-        console.log('充能前:', player.heatEngine.charge, '能量:', player.energy);
         player.energy -= 1;
         player.heatEngine.charge += 1;
-        console.log('充能后:', player.heatEngine.charge, '能量:', player.energy);
         
         this.updateUI();
+    },
+
+    // 手动发射热机
+    fireHeatEngine(playerId) {
+        const success = this.game.fireHeatEngine(playerId);
+        if (success) {
+            this.updateUI();
+        }
     },
     
     updateArenaParamsPanel() {
@@ -479,9 +530,9 @@ const GameUI = {
     updateTurnIndicator() {
         const indicator = document.getElementById('turn-indicator');
         const currentPlayerId = this.game.players[this.game.currentPlayerIndex]?.id;
-        const phaseText = this.game.turnPhase === 'discard' ? '弃牌阶段' : '出牌阶段';
+        const phaseText = this.game.turnPhase === 'discard' ? '弃牌' : '出牌';
         if (indicator) {
-            indicator.textContent = `回合 ${this.game.currentTurn} - 玩家 ${currentPlayerId} - ${phaseText}`;
+            indicator.textContent = `第 ${this.game.currentTurn} 回合 - 玩家 ${currentPlayerId} ${phaseText}`;
         }
         
         this.game.players.forEach((player, index) => {
@@ -583,60 +634,3 @@ window.addEventListener('DOMContentLoaded', () => {
     console.log('DOM loaded, initializing game...');
     GameUI.init();
 });
-
-// 全局测试函数
-window.testHeatEngine = function() {
-    console.log('========================================');
-    console.log('=== 测试按钮被点击 ===');
-    
-    if (!window.gameUI) {
-        console.log('❌ window.gameUI 不存在!');
-        return;
-    }
-    
-    console.log('window.gameUI:', window.gameUI);
-    console.log('window.gameUI.game:', window.gameUI.game);
-    
-    const game = window.gameUI.game;
-    console.log('game.players:', game.players);
-    console.log('game.currentPlayerIndex:', game.currentPlayerIndex);
-    
-    const currentPlayer = game.players[game.currentPlayerIndex];
-    console.log('currentPlayer:', currentPlayer);
-    
-    if (currentPlayer) {
-        console.log('currentPlayer.heatEngine (before):', currentPlayer.heatEngine);
-        
-        if (!currentPlayer.heatEngine || !currentPlayer.heatEngine.active) {
-            console.log('>>> 激活热机...');
-            currentPlayer.heatEngine = {
-                active: true,
-                charge: 0,
-                maxCharge: 4,
-                duration: 2,
-                impulseMultiplier: 3,
-                ownerId: currentPlayer.id
-            };
-            console.log('热机已激活:', currentPlayer.heatEngine);
-        } else {
-            console.log('>>> 充能热机...');
-            console.log('能量:', currentPlayer.energy, '充能:', currentPlayer.heatEngine.charge);
-            if (currentPlayer.energy >= 1 && currentPlayer.heatEngine.charge < 4) {
-                currentPlayer.energy -= 1;
-                currentPlayer.heatEngine.charge += 1;
-                console.log('✅ 充能成功!');
-                console.log('充能后 charge:', currentPlayer.heatEngine.charge, '能量:', currentPlayer.energy);
-            } else {
-                console.log('❌ 不能充能 - 能量不足或已满');
-            }
-        }
-        
-        console.log('currentPlayer.heatEngine (after):', currentPlayer.heatEngine);
-        console.log('>>> 调用 updateUI()');
-        window.gameUI.updateUI();
-        console.log('>>> updateUI() 完成');
-    } else {
-        console.log('❌ 找不到当前玩家!');
-    }
-    console.log('========================================');
-};

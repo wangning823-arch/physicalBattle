@@ -29,7 +29,7 @@ const CARDS_DATABASE = [
         icon: '🌀',
         description: '在指定位置放置引力源，持续3回合',
         formula: 'F = G·M/r²',
-        effect: { duration: 3, radius: 150, strength: 800, needsAim: true, placeAnywhere: true },
+        effect: { duration: 3, radius: 150, strength: 200, needsAim: true, placeAnywhere: true },
         rarity: 'rare'
     },
     {
@@ -118,6 +118,17 @@ const CARDS_DATABASE = [
         description: '将你与对手刚性连接，距离保持不变，持续2回合',
         formula: 'd = const',
         effect: { duration: 2, type: 'rigid_constraint' },
+        rarity: 'rare'
+    },
+    {
+        id: 'soft_rope',
+        name: '软绳约束',
+        type: CARD_TYPES.UTILITY,
+        cost: 1,
+        icon: '🪢',
+        description: '用软绳连接你与对手，距离可自由变化但超过原长时立即锁定，持续3回合',
+        formula: 'F = 0 (d ≤ d₀); d = d₀ (d > d₀)',
+        effect: { duration: 3, type: 'soft_rope' },
         rarity: 'rare'
     },
     {
