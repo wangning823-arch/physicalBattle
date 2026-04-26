@@ -185,6 +185,17 @@ const CARDS_DATABASE = [
         formula: '|ψ⟩ = α|alive⟩ + β|hidden⟩',
         effect: { superposition: true },
         rarity: 'epic'
+    },
+    {
+        id: 'heat_engine',
+        name: '热机',
+        type: CARD_TYPES.UTILITY,
+        cost: 4,
+        icon: '⚙️🔥',
+        description: '召唤热机附身，2回合内可充能4点触发3倍动量冲击的强力冲量，被冰冻则能量归零',
+        formula: 'W = Q·η',
+        effect: { heatEngine: true, duration: 2, maxCharge: 4, impulseMultiplier: 3 },
+        rarity: 'epic'
     }
 ];
 
@@ -214,9 +225,47 @@ class CardSystem {
             }
         }
         
+        // 量子叠加减少副本为原来一半
+        const quantumCard = CARDS_DATABASE.find(c => c.id === 'quantum_superposition');
+        let quantumRemoved = 0;
+        for (let i = this.deck.length - 1; i >= 0 && quantumRemoved < 1; i--) {
+            if (this.deck[i].id === 'quantum_superposition') {
+                this.deck.splice(i, 1);
+                quantumRemoved++;
+            }
+        }
+        
         // 将牌组数量翻倍，保持各卡牌概率不变
-        const baseDeck = [...this.deck];
+        let baseDeck = [...this.deck];
         this.deck = [...baseDeck, ...baseDeck];
+        
+        // 再次翻倍，使牌组数量增加到原来的2倍
+        baseDeck = [...this.deck];
+        this.deck = [...baseDeck, ...baseDeck];
+        
+        // 将电有关的4张卡牌数量都减小到8张
+        const electricCardIds = ['charge_attach', 'charge_attach_negative', 'self_charge', 'self_charge_negative'];
+        electricCardIds.forEach(cardId => {
+            let currentCount = this.deck.filter(c => c.id === cardId).length;
+            let toRemove = currentCount - 8;
+            if (toRemove > 0) {
+                for (let i = this.deck.length - 1; i >= 0 && toRemove > 0; i--) {
+                    if (this.deck[i].id === cardId) {
+                        this.deck.splice(i, 1);
+                        toRemove--;
+                    }
+                }
+            }
+        });
+        
+        // 确保热机卡牌数量适中（史诗卡，6张）
+        const heatEngineCount = this.deck.filter(c => c.id === 'heat_engine').length;
+        if (heatEngineCount < 6) {
+            const heatEngineCard = CARDS_DATABASE.find(c => c.id === 'heat_engine');
+            for (let i = heatEngineCount; i < 6; i++) {
+                this.deck.push(heatEngineCard);
+            }
+        }
         
         this.shuffle();
     }

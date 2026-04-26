@@ -1,0 +1,7 @@
+# Temporary files
+server.pid
+server.log
+*.log
+*.pid
+node_modules/
+.DS_Store

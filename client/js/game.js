@@ -8,8 +8,8 @@ class Game {
         this.currentTurn = 1;
         this.currentPlayerIndex = 0;
         this.players = [
-            { id: 1, energy: GAME_CONFIG.STARTING_ENERGY, cards: [], eliminated: false, effects: [], quantumState: null },
-            { id: 2, energy: GAME_CONFIG.STARTING_ENERGY, cards: [], eliminated: false, effects: [], quantumState: null }
+            { id: 1, energy: GAME_CONFIG.STARTING_ENERGY, cards: [], eliminated: false, effects: [], quantumState: null, heatEngine: null },
+            { id: 2, energy: GAME_CONFIG.STARTING_ENERGY, cards: [], eliminated: false, effects: [], quantumState: null, heatEngine: null }
         ];
         this.selectedCard = null;
         this.aimingState = { active: false, card: null, cardIndex: -1, playerId: 0 };
@@ -100,6 +100,11 @@ class Game {
         const targetPhysics = this.physics.getPlayer(targetId);
         const targetPlayer = this.players.find(p => p.id === targetId);
         
+        // 热机充能功能：暂时禁用自动充能，避免问题
+        // if (card.id !== 'heat_engine' && selfPlayer.heatEngine && selfPlayer.heatEngine.active) {
+        //     selfPlayer.heatEngine.charge = Math.min(selfPlayer.heatEngine.maxCharge, selfPlayer.heatEngine.charge + 1);
+        // }
+        
         // 如果目标处于量子叠加态，卡牌无效
         if (targetPlayer && targetPlayer.quantumState !== null && 
             (card.effect.targetEnemy || ['momentum_blast', 'explosive_charge', 'charge_attach', 'charge_attach_negative'].includes(card.id))) {
@@ -166,18 +171,7 @@ class Game {
                     });
                 }
                 break;
-            case 'ice_zone':
-                if (aimTarget) {
-                    this.physics.addEffect({
-                        type: 'frictionZone',
-                        x: aimTarget.x,
-                        y: aimTarget.y,
-                        radius: card.effect.radius,
-                        friction: card.effect.friction,
-                        duration: card.effect.duration
-                    });
-                }
-                break;
+
             case 'vacuum_zone':
                 if (aimTarget) {
                     this.physics.addEffect({
@@ -257,7 +251,6 @@ class Game {
             case 'charge_attach':
             case 'charge_attach_negative':
                 // 给目标（敌人）累加电荷
-                const targetPlayer = this.players.find(p => p.id === targetId);
                 if (targetPlayer && !targetPlayer.eliminated) {
                     targetPlayer.charge += card.effect.charge;
                     targetPlayer.chargeDuration = card.effect.duration;
@@ -268,6 +261,57 @@ class Game {
                 // 给自己累加电荷
                 selfPlayer.charge += card.effect.charge;
                 selfPlayer.chargeDuration = card.effect.duration;
+                break;
+            case 'ice_zone':
+                // 冰霜地带 - 重置对方热机能量
+                if (targetPlayer && targetPlayer.heatEngine && targetPlayer.heatEngine.active) {
+                    targetPlayer.heatEngine.charge = 0;
+                    // 添加冰冻特效
+                    if (targetPhysics) {
+                        this.physics.addTempEffect({
+                            type: 'ice_reset',
+                            x: targetPhysics.position.x,
+                            y: targetPhysics.position.y,
+                            life: 800,
+                            maxLife: 800
+                        });
+                    }
+                }
+                // 原有的摩擦区域功能
+                if (aimTarget) {
+                    this.physics.addEffect({
+                        type: 'frictionZone',
+                        x: aimTarget.x,
+                        y: aimTarget.y,
+                        radius: card.effect.radius,
+                        friction: card.effect.friction,
+                        duration: card.effect.duration
+                    });
+                }
+                break;
+            case 'heat_engine':
+                console.log('=== 激活热机 ===');
+                console.log('玩家ID:', playerId);
+                // 激活热机
+                selfPlayer.heatEngine = {
+                    active: true,
+                    charge: 0,
+                    maxCharge: 4,
+                    duration: 2,
+                    impulseMultiplier: 3,
+                    ownerId: playerId
+                };
+                console.log('热机状态:', selfPlayer.heatEngine);
+                // 添加热机特效
+                if (selfPhysics) {
+                    this.physics.addTempEffect({
+                        type: 'heat_engine',
+                        x: selfPhysics.position.x,
+                        y: selfPhysics.position.y,
+                        life: 500,
+                        maxLife: 500
+                    });
+                }
                 break;
             case 'quantum_superposition':
                 // 进入量子叠加态
@@ -331,6 +375,16 @@ class Game {
                     }
                     this.processPlayerEffects(player);
                     
+                    // 处理热机
+                    if (player.heatEngine && player.heatEngine.active) {
+                        player.heatEngine.duration--;
+                        
+                        if (player.heatEngine.duration <= 0) {
+                            // 热机持续时间结束，结算
+                            this.settleHeatEngine(player);
+                        }
+                    }
+                    
                     // 更新电荷持续时间
                     if (player.chargeDuration > 0) {
                         player.chargeDuration--;
@@ -365,6 +419,43 @@ class Game {
             });
         }
         player.quantumState = null; // 恢复正常
+    }
+    
+    // 热机结算
+    settleHeatEngine(player) {
+        const heatEngine = player.heatEngine;
+        if (!heatEngine) return;
+        
+        const selfPhysics = this.physics.getPlayer(player.id);
+        const targetId = player.id === 1 ? 2 : 1;
+        const targetPhysics = this.physics.getPlayer(targetId);
+        
+        if (heatEngine.charge >= heatEngine.maxCharge) {
+            // 充满能量，释放3倍动量冲击
+            if (targetPhysics && selfPhysics) {
+                const dx = targetPhysics.position.x - selfPhysics.position.x;
+                const dy = targetPhysics.position.y - selfPhysics.position.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist > 0) {
+                    const impulse = 180 * heatEngine.impulseMultiplier; // 3×动量冲击
+                    const impulseX = (dx / dist) * impulse;
+                    const impulseY = (dy / dist) * impulse;
+                    this.physics.applyImpulse(targetId, impulseX, impulseY);
+                    
+                    // 添加热机爆发特效
+                    this.physics.addTempEffect({
+                        type: 'heat_engine_blast',
+                        x: targetPhysics.position.x,
+                        y: targetPhysics.position.y,
+                        life: 1000,
+                        maxLife: 1000
+                    });
+                }
+            }
+        }
+        
+        // 无论是否充满，热机都消失
+        player.heatEngine = null;
     }
 
     processPlayerEffects(player) {
@@ -546,8 +637,8 @@ class Game {
         this.physics.createPlayer(-160, 0, 1);
         this.physics.createPlayer(160, 0, 2);
         this.players = [
-            { id: 1, energy: GAME_CONFIG.STARTING_ENERGY, cards: [], eliminated: false, shieldActive: false, effects: [], charge: 0, chargeDuration: 0, quantumState: null },
-            { id: 2, energy: GAME_CONFIG.STARTING_ENERGY, cards: [], eliminated: false, shieldActive: false, effects: [], charge: 0, chargeDuration: 0, quantumState: null }
+            { id: 1, energy: GAME_CONFIG.STARTING_ENERGY, cards: [], eliminated: false, shieldActive: false, effects: [], charge: 0, chargeDuration: 0, quantumState: null, heatEngine: null },
+            { id: 2, energy: GAME_CONFIG.STARTING_ENERGY, cards: [], eliminated: false, shieldActive: false, effects: [], charge: 0, chargeDuration: 0, quantumState: null, heatEngine: null }
         ];
         this.currentTurn = 1;
         this.currentPlayerIndex = 0;

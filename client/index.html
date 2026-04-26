@@ -15,6 +15,7 @@
                     <div class="energy-fill" style="width: 100%"></div>
                 </div>
                 <span class="energy-text">10 / 10</span>
+                <div id="player1-heat-engine" class="heat-engine-display"></div>
             </div>
             <div id="game-info">
                 <span id="turn-indicator">回合 1</span>
@@ -25,6 +26,7 @@
                     <div class="energy-fill" style="width: 100%"></div>
                 </div>
                 <span class="energy-text">10 / 10</span>
+                <div id="player2-heat-engine" class="heat-engine-display"></div>
             </div>
         </div>
 
@@ -120,7 +122,10 @@
             <div id="cards-area">
                 <div id="cards-hand"></div>
             </div>
-            <button id="end-turn-btn">结束回合</button>
+            <div style="display: flex; gap: 10px;">
+                <button id="end-turn-btn">结束回合</button>
+                <button onclick="window.testHeatEngine()" style="padding: 10px 20px; background: #FF6B35; border: none; border-radius: 6px; color: white; cursor: pointer;">🧪 测试热机</button>
+            </div>
         </div>
     </div>
 
