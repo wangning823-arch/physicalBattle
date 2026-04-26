@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>物理竞技场 - Physics Arena</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="game-container">
+        <div id="hud-top">
+            <div id="player1-status" class="player-status">
+                <span class="player-name">玩家 1</span>
+                <div class="energy-bar">
+                    <div class="energy-fill" style="width: 100%"></div>
+                </div>
+                <span class="energy-text">10 / 10</span>
+            </div>
+            <div id="game-info">
+                <span id="turn-indicator">回合 1</span>
+            </div>
+            <div id="player2-status" class="player-status">
+                <span class="player-name">玩家 2</span>
+                <div class="energy-bar">
+                    <div class="energy-fill" style="width: 100%"></div>
+                </div>
+                <span class="energy-text">10 / 10</span>
+            </div>
+        </div>
+
+        <div id="main-game-area">
+            <div id="card-params-panel" class="side-panel">
+                <h3>卡片变化参数</h3>
+                <div id="card-params-content">
+                    <div class="param-item">
+                        <span class="param-label">当前卡片</span>
+                        <span class="param-value" id="current-card-name">-</span>
+                    </div>
+                    <div class="param-item">
+                        <span class="param-label">卡片类型</span>
+                        <span class="param-value" id="current-card-type">-</span>
+                    </div>
+                    <div class="param-item">
+                        <span class="param-label">物理公式</span>
+                        <span class="param-value" id="current-card-formula">-</span>
+                    </div>
+                    <div class="param-item">
+                        <span class="param-label">效果描述</span>
+                        <span class="param-value" id="current-card-effect">-</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="arena-container">
+                <canvas id="game-canvas"></canvas>
+            </div>
+            
+            <div id="physics-params-panel" class="side-panel">
+                <h3>物理参数</h3>
+                <div id="physics-params-content">
+                    <div class="player-params" id="player1-params">
+                        <h4>玩家 1</h4>
+                        <div class="param-item">
+                            <span class="param-label">位置 (x, y)</span>
+                            <span class="param-value" id="p1-position">(0, 0)</span>
+                        </div>
+                        <div class="param-item">
+                            <span class="param-label">速度 (x, y)</span>
+                            <span class="param-value" id="p1-velocity">(0, 0)</span>
+                        </div>
+                        <div class="param-item">
+                            <span class="param-label">质量</span>
+                            <span class="param-value" id="p1-mass">70 kg</span>
+                        </div>
+                        <div class="param-item">
+                            <span class="param-label">距中心距离</span>
+                            <span class="param-value" id="p1-distance">0</span>
+                        </div>
+                    </div>
+                    <div class="player-params" id="player2-params">
+                        <h4>玩家 2</h4>
+                        <div class="param-item">
+                            <span class="param-label">位置 (x, y)</span>
+                            <span class="param-value" id="p2-position">(0, 0)</span>
+                        </div>
+                        <div class="param-item">
+                            <span class="param-label">速度 (x, y)</span>
+                            <span class="param-value" id="p2-velocity">(0, 0)</span>
+                        </div>
+                        <div class="param-item">
+                            <span class="param-label">质量</span>
+                            <span class="param-value" id="p2-mass">70 kg</span>
+                        </div>
+                        <div class="param-item">
+                            <span class="param-label">距中心距离</span>
+                            <span class="param-value" id="p2-distance">0</span>
+                        </div>
+                    </div>
+                    
+                    <div class="arena-params" id="arena-params">
+                        <h4>场地物理参数</h4>
+                        <div class="param-item">
+                            <span class="param-label">场地状态</span>
+                            <span class="param-value" id="arena-status">正常</span>
+                        </div>
+                        <div class="param-item">
+                            <span class="param-label">基础摩擦因数</span>
+                            <span class="param-value" id="arena-friction">4.5</span>
+                        </div>
+                        <div class="param-item">
+                            <span class="param-label">场地特效</span>
+                            <span class="param-value" id="arena-effects">无</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="hand-container">
+            <div id="cards-area">
+                <div id="cards-hand"></div>
+            </div>
+            <button id="end-turn-btn">结束回合</button>
+        </div>
+    </div>
+
+    <div id="game-over-modal" class="hidden">
+        <div class="modal-content">
+            <h2 id="winner-text"></h2>
+            <button id="restart-btn">再来一局</button>
+        </div>
+    </div>
+
+    <div id="discard-modal" class="hidden">
+        <div class="modal-content">
+            <h2 id="discard-title">手牌超过上限！请选择要弃掉的牌</h2>
+            <p id="discard-count">需要弃掉: <span id="discard-required">0</span> 张牌</p>
+            <p id="discard-selected">已选择: <span id="discard-selected-count">0</span> 张</p>
+            <div id="discard-cards-area"></div>
+            <button id="confirm-discard-btn" disabled>确认弃牌</button>
+        </div>
+    </div>
+
+    <div id="card-guide" style="background: #1a1a2e; padding: 20px; margin-top: 20px; border-radius: 10px; color: #fff;">
+        <h3 style="color: #1E90FF; margin-top: 0;">卡片使用说明</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px;">
+            <div style="background: #252540; padding: 10px; border-radius: 8px;">
+                <span style="font-size: 24px;">💥</span>
+                <strong>动量冲击 (1能量)</strong>
+                <p style="margin: 5px 0; font-size: 12px;">点击选择方向，对敌人施加冲量</p>
+            </div>
+            <div style="background: #252540; padding: 10px; border-radius: 8px;">
+                <span style="font-size: 24px;">💨</span>
+                <strong>定向冲刺 (1能量)</strong>
+                <p style="margin: 5px 0; font-size: 12px;">点击选择方向，向该方向冲刺</p>
+            </div>
+            <div style="background: #252540; padding: 10px; border-radius: 8px;">
+                <span style="font-size: 24px;">🌀</span>
+                <strong>引力陷阱 (2能量)</strong>
+                <p style="margin: 5px 0; font-size: 12px;">点击放置位置，产生持续引力场，持续3回合</p>
+            </div>
+            <div style="background: #252540; padding: 10px; border-radius: 8px;">
+                <span style="font-size: 24px;">🔄</span>
+                <strong>排斥力场 (2能量)</strong>
+                <p style="margin: 5px 0; font-size: 12px;">在自身周围产生排斥力场，持续2回合</p>
+            </div>
+            <div style="background: #252540; padding: 10px; border-radius: 8px;">
+                <span style="font-size: 24px;">🧊</span>
+                <strong>冰霜地带 (1能量)</strong>
+                <p style="margin: 5px 0; font-size: 12px;">点击放置位置，大幅降低摩擦，持续1回合</p>
+            </div>
+            <div style="background: #252540; padding: 10px; border-radius: 8px;">
+                <span style="font-size: 24px;">🏋️</span>
+                <strong>惯性增强 (1能量)</strong>
+                <p style="margin: 5px 0; font-size: 12px;">自身质量变为3倍，持续2回合</p>
+            </div>
+            <div style="background: #252540; padding: 10px; border-radius: 8px;">
+                <span style="font-size: 24px;">🪶</span>
+                <strong>惯性减弱 (1能量)</strong>
+                <p style="margin: 5px 0; font-size: 12px;">自身质量变为0.3倍，持续2回合</p>
+            </div>
+            <div style="background: #2d2d50; padding: 10px; border-radius: 8px; border: 2px solid #9b59b6;">
+                <span style="font-size: 24px;">💣</span>
+                <strong>爆裂冲击 (3能量)</strong>
+                <p style="margin: 5px 0; font-size: 12px;">强力冲量攻击，点击选择方向</p>
+            </div>
+            <div style="background: #252540; padding: 10px; border-radius: 8px;">
+                <span style="font-size: 24px;">⚓</span>
+                <strong>定位锚 (2能量)</strong>
+                <p style="margin: 5px 0; font-size: 12px;">固定自身位置1回合，免疫位移</p>
+            </div>
+            <div style="background: #252540; padding: 10px; border-radius: 8px;">
+                <span style="font-size: 24px;">🌫️</span>
+                <strong>真空区域 (1能量)</strong>
+                <p style="margin: 5px 0; font-size: 12px;">点击放置位置，空气阻力降为0，持续1回合</p>
+            </div>
+            <div style="background: #252540; padding: 10px; border-radius: 8px;">
+                <span style="font-size: 24px;">🔗</span>
+                <strong>刚性连接 (2能量)</strong>
+                <p style="margin: 5px 0; font-size: 12px;">将你与对手刚性连接，距离保持不变，持续2回合</p>
+            </div>
+        </div>
+        <p style="margin-top: 15px; font-size: 14px; color: #aaa;">
+            <strong>游戏规则：</strong>点击手牌使用卡片，带瞄准的卡片需再点击场地选择位置/方向，将对方推出圆盘即可获胜！
+        </p>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <script src="js/constants.js"></script>
+    <script src="js/physics.js"></script>
+    <script src="js/cardSystem.js"></script>
+    <script src="js/renderer.js"></script>
+    <script src="js/game.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

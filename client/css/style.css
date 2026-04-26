@@ -1,0 +1,402 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 100%);
+    color: #fff;
+    padding: 20px;
+}
+
+#game-container {
+    display: flex;
+    flex-direction: column;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 10px;
+}
+
+#hud-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 10px;
+    margin-bottom: 10px;
+}
+
+.player-status {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    min-width: 150px;
+    padding: 10px;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.player-status.current-turn {
+    background: rgba(255, 215, 0, 0.2);
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+    border: 2px solid #FFD700;
+}
+
+.player-status.current-turn .player-name {
+    color: #FFD700;
+}
+
+.player-name {
+    font-size: 14px;
+    font-weight: bold;
+    color: #1E90FF;
+}
+
+.energy-bar {
+    width: 100%;
+    height: 20px;
+    background: #333;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.energy-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #FF6B35, #FFD700);
+    transition: width 0.3s ease;
+}
+
+.energy-text {
+    font-size: 12px;
+    color: #aaa;
+}
+
+#game-info {
+    text-align: center;
+}
+
+#turn-indicator {
+    font-size: 18px;
+    font-weight: bold;
+    color: #1E90FF;
+}
+
+#main-game-area {
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+}
+
+.side-panel {
+    width: 220px;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 10px;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+}
+
+.side-panel h3 {
+    color: #1E90FF;
+    margin-bottom: 15px;
+    font-size: 16px;
+    text-align: center;
+    border-bottom: 1px solid rgba(30, 144, 255, 0.3);
+    padding-bottom: 8px;
+}
+
+#physics-params-content {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.player-params {
+    background: rgba(30, 144, 255, 0.1);
+    border-radius: 8px;
+    padding: 10px;
+}
+
+.player-params h4 {
+    color: #FFD700;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+.param-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 12px;
+}
+
+.param-label {
+    color: #aaa;
+}
+
+.param-value {
+    color: #fff;
+    font-weight: bold;
+}
+
+#card-params-content {
+    flex: 1;
+}
+
+#arena-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 15px;
+    overflow: hidden;
+}
+
+#game-canvas {
+    border-radius: 10px;
+}
+
+#hand-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 10px;
+    margin-top: 10px;
+}
+
+#cards-area {
+    flex: 1;
+    overflow-x: auto;
+}
+
+#cards-hand {
+    display: flex;
+    gap: 10px;
+    padding: 10px;
+    min-height: 160px;
+}
+
+.card {
+    min-width: 100px;
+    height: 140px;
+    background: linear-gradient(145deg, #2a2a4a, #1a1a3a);
+    border: 2px solid #1E90FF;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex;
+    flex-direction: column;
+    padding: 8px;
+    position: relative;
+}
+
+.card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 10px 30px rgba(30, 144, 255, 0.5);
+}
+
+.card.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    border-color: #555;
+}
+
+.card.selected {
+    border-color: #FFD700;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.7);
+}
+
+.card-cost {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: #FF6B35;
+    color: #fff;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.card-icon {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+}
+
+.card-name {
+    font-size: 10px;
+    text-align: center;
+    color: #fff;
+    margin-top: auto;
+}
+
+#end-turn-btn {
+    padding: 15px 30px;
+    font-size: 16px;
+    font-weight: bold;
+    background: linear-gradient(145deg, #1E90FF, #0066cc);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+#end-turn-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 5px 20px rgba(30, 144, 255, 0.5);
+}
+
+#end-turn-btn:disabled {
+    background: #555;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+#card-detail {
+    position: fixed;
+    bottom: 200px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.9);
+    padding: 20px;
+    border-radius: 10px;
+    border: 2px solid #1E90FF;
+    min-width: 300px;
+}
+
+#card-detail.hidden {
+    display: none;
+}
+
+#game-over-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+#game-over-modal.hidden {
+    display: none;
+}
+
+.modal-content {
+    background: linear-gradient(145deg, #2a2a4a, #1a1a3a);
+    padding: 40px;
+    border-radius: 15px;
+    text-align: center;
+    border: 3px solid #FFD700;
+}
+
+.modal-content h2 {
+    font-size: 32px;
+    color: #FFD700;
+    margin-bottom: 20px;
+}
+
+#restart-btn {
+    padding: 15px 40px;
+    font-size: 18px;
+    background: linear-gradient(145deg, #1E90FF, #0066cc);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+#restart-btn:hover {
+    transform: scale(1.1);
+}
+
+.hidden {
+    display: none !important;
+}
+
+#discard-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+#discard-modal.hidden {
+    display: none;
+}
+
+#discard-modal .modal-content {
+    max-width: 90%;
+    max-height: 90%;
+    overflow-y: auto;
+}
+
+#discard-title {
+    font-size: 24px;
+    color: #FFD700;
+    margin-bottom: 10px;
+}
+
+#discard-count, #discard-selected {
+    font-size: 16px;
+    margin-bottom: 10px;
+    color: #aaa;
+}
+
+#discard-cards-area {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 20px 0;
+    margin: 20px 0;
+    border-top: 1px solid rgba(255, 215, 0, 0.3);
+    border-bottom: 1px solid rgba(255, 215, 0, 0.3);
+}
+
+#confirm-discard-btn {
+    padding: 15px 40px;
+    font-size: 18px;
+    background: linear-gradient(145deg, #FF6B35, #cc5500);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: transform 0.2s, opacity 0.2s;
+}
+
+#confirm-discard-btn:hover:not(:disabled) {
+    transform: scale(1.1);
+}
+
+#confirm-discard-btn:disabled {
+    background: #555;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
