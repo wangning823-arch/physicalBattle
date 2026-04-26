@@ -20,8 +20,25 @@ class PhysicsEngine {
      * 更新效果的剩余回合数（每回合调用一次）
      */
     updateEffectsTurn() {
-        // 处理普通效果
+        console.log('=== updateEffectsTurn 被调用 ===');
+        console.log('当前 effects:', this.effects.map(e => ({ type: e.type, duration: e.duration })));
+        
+        // 处理普通效果，但要保留约束效果，只减少它们的duration
         this.effects = this.effects.filter(effect => {
+            // 如果是约束效果，只减少 duration，不过滤
+            if (effect.type === 'rigid_constraint' || effect.type === 'soft_rope') {
+                if (effect.duration > 0) {
+                    effect.duration--;
+                    console.log(`约束 ${effect.type} duration 减到 ${effect.duration}`);
+                    if (effect.duration <= 0) {
+                        console.log(`约束 ${effect.type} 结束了`);
+                        return false;
+                    }
+                }
+                return true;
+            }
+            
+            // 处理普通效果
             if (effect.duration > 0) {
                 effect.duration--;
                 if (effect.duration <= 0) {
@@ -36,9 +53,12 @@ class PhysicsEngine {
             return true;
         });
         
+        console.log('过滤后的 effects:', this.effects.map(e => ({ type: e.type, duration: e.duration })));
+        
         // 检查是否有刚性约束效果需要处理
         const rigidEffect = this.effects.find(e => e.type === 'rigid_constraint');
         if (!rigidEffect && this.rigidConstraint) {
+            console.log('移除刚性约束，因为 effects 中没有了');
             Matter.World.remove(this.world, this.rigidConstraint);
             this.rigidConstraint = null;
         }
@@ -47,11 +67,14 @@ class PhysicsEngine {
         const softRopeEffect = this.effects.find(e => e.type === 'soft_rope');
         if (!softRopeEffect) {
             if (this.softRopeConstraint) {
+                console.log('移除软绳约束，因为 effects 中没有了');
                 Matter.World.remove(this.world, this.softRopeConstraint);
                 this.softRopeConstraint = null;
             }
             this.softRopeOriginalLength = 0;
             this.isSoftRopeLocked = false;
+        } else {
+            console.log('软绳约束仍然存在，duration:', softRopeEffect.duration);
         }
     }
 
@@ -93,6 +116,7 @@ class PhysicsEngine {
      * 创建软绳约束
      */
     createSoftRope(duration) {
+        console.log('=== createSoftRope 被调用，duration:', duration);
         if (this.players.length < 2) return;
         
         // 如果已经有软绳约束，先移除
@@ -108,11 +132,13 @@ class PhysicsEngine {
         this.isSoftRopeLocked = false;
         
         // 添加到效果列表
-        this.effects.push({
+        const newEffect = {
             type: 'soft_rope',
             duration: duration,
             originalLength: this.softRopeOriginalLength
-        });
+        };
+        this.effects.push(newEffect);
+        console.log('添加软绳约束到 effects，当前 effects:', this.effects.map(e => ({ type: e.type, duration: e.duration })));
     }
 
     createArena() {

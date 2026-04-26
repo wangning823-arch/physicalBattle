@@ -334,6 +334,8 @@ class Game {
                 break;
             case 'quantum_superposition':
                 // 进入量子叠加态
+                console.log('=== 使用量子叠加卡牌 ===');
+                console.log('当前 physics.effects:', this.physics.effects.map(e => ({ type: e.type, duration: e.duration })));
                 selfPlayer.quantumState = 'superposition';
                 // 添加特效
                 if (selfPhysics) {
@@ -345,6 +347,7 @@ class Game {
                         maxLife: 1000
                     });
                 }
+                console.log('使用量子叠加后 physics.effects:', this.physics.effects.map(e => ({ type: e.type, duration: e.duration })));
                 break;
         }
         this.cardSystem.discard(card);
