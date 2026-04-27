@@ -465,21 +465,27 @@ body {
     opacity: 0.6;
 }
 
-/* 卡片指南 - 调整位置以适应全屏 */
+/* 卡片指南 - 放在页面最底部 */
+body {
+    overflow: auto; /* 允许页面滚动 */
+}
+
+#game-overlay {
+    position: relative;
+    min-height: 100vh;
+    height: auto;
+}
+
 #card-guide {
-    position: fixed;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
+    position: relative;
+    margin: 20px auto;
     background: rgba(26, 26, 46, 0.95);
     padding: 20px;
     border-radius: 10px;
     color: #fff;
-    max-width: 90%;
-    max-height: 30vh;
-    overflow-y: auto;
-    z-index: 20;
-    pointer-events: auto;
+    max-width: 1400px;
+    width: 90%;
+    z-index: 5;
     backdrop-filter: blur(5px);
     border: 1px solid rgba(30, 144, 255, 0.3);
 }
@@ -487,4 +493,36 @@ body {
 #card-guide h3 {
     color: #1E90FF;
     margin-top: 0;
+}
+
+.card-guide-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.guide-card {
+    background: #252540;
+    padding: 10px;
+    border-radius: 8px;
+}
+
+.guide-card.special {
+    background: #2d2d50;
+    border: 2px solid #9b59b6;
+}
+
+.guide-icon {
+    font-size: 24px;
+}
+
+.guide-card p {
+    margin: 5px 0;
+    font-size: 12px;
+}
+
+.guide-rules {
+    margin-top: 15px;
+    font-size: 14px;
+    color: #aaa;
 }

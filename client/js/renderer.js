@@ -82,153 +82,313 @@ class Renderer {
         const charGroup = new THREE.Group();
         charGroup.playerId = playerId;
 
+        // 拳皇风格配色
+        const skinMaterial = new THREE.MeshStandardMaterial({
+            color: 0xFFDBAC, metalness: 0.1, roughness: 0.9
+        });
         const mainMaterial = new THREE.MeshStandardMaterial({
-            color: colors.main, metalness: 0.3, roughness: 0.7
+            color: colors.main, metalness: 0.4, roughness: 0.6
         });
         const secondaryMaterial = new THREE.MeshStandardMaterial({
-            color: colors.secondary, metalness: 0.2, roughness: 0.8
+            color: colors.secondary, metalness: 0.3, roughness: 0.7
+        });
+        const accentMaterial = new THREE.MeshStandardMaterial({
+            color: colors.emissive, emissive: colors.emissive, emissiveIntensity: 0.3, metalness: 0.5, roughness: 0.5
+        });
+        const hairMaterial = new THREE.MeshStandardMaterial({
+            color: playerId === 1 ? 0x2D1810 : 0x101020, metalness: 0.2, roughness: 0.8
+        });
+        const eyeMaterial = new THREE.MeshStandardMaterial({
+            color: 0xFFFFFF, emissive: 0x444444, emissiveIntensity: 0.2
         });
 
-        const headGeo = new THREE.SphereGeometry(CHARACTER_CONFIG.HEAD_RADIUS, 16, 16);
-        const head = new THREE.Mesh(headGeo, mainMaterial);
-        head.position.y = CHARACTER_CONFIG.HEIGHT - CHARACTER_CONFIG.HEAD_RADIUS;
+        // ===== 头部 =====
+        const headGroup = new THREE.Group();
+        headGroup.position.y = CHARACTER_CONFIG.HEIGHT - 8;
+
+        // 头 - 稍微椭圆一点更像人
+        const headGeo = new THREE.SphereGeometry(10, 24, 24);
+        headGeo.scale(1, 1.1, 0.9);
+        const head = new THREE.Mesh(headGeo, skinMaterial);
         head.name = 'head';
-        charGroup.add(head);
+        headGroup.add(head);
 
-        const torsoGeo = new THREE.BoxGeometry(
-            CHARACTER_CONFIG.TORSO_WIDTH, CHARACTER_CONFIG.TORSO_HEIGHT, CHARACTER_CONFIG.TORSO_DEPTH
-        );
-        const torso = new THREE.Mesh(torsoGeo, mainMaterial);
-        torso.position.y = CHARACTER_CONFIG.HEIGHT - CHARACTER_CONFIG.HEAD_RADIUS * 2 - CHARACTER_CONFIG.TORSO_HEIGHT / 2;
-        torso.name = 'torso';
-        charGroup.add(torso);
+        // 头发 - 拳皇风格的刺头
+        if (playerId === 1) {
+            // 玩家1 - 火焰风格头发
+            for (let i = 0; i < 7; i++) {
+                const spikeGeo = new THREE.ConeGeometry(3 + Math.random() * 2, 8 + Math.random() * 6, 8);
+                const spike = new THREE.Mesh(spikeGeo, hairMaterial);
+                const angle = (i / 7) * Math.PI - Math.PI / 2;
+                spike.position.set(Math.sin(angle) * 5, 8 + Math.random() * 2, Math.cos(angle) * 3);
+                spike.rotation.x = Math.sin(angle) * 0.3;
+                spike.rotation.z = -Math.cos(angle) * 0.3;
+                headGroup.add(spike);
+            }
+            // 头顶主发
+            const topHairGeo = new THREE.ConeGeometry(6, 12, 8);
+            const topHair = new THREE.Mesh(topHairGeo, hairMaterial);
+            topHair.position.y = 12;
+            topHair.rotation.x = 0.2;
+            headGroup.add(topHair);
+        } else {
+            // 玩家2 - 酷炫背头
+            const hairGeo = new THREE.SphereGeometry(11, 24, 24);
+            hairGeo.scale(1, 0.8, 1.2);
+            const hair = new THREE.Mesh(hairGeo, hairMaterial);
+            hair.position.y = 3;
+            hair.position.z = -2;
+            headGroup.add(hair);
 
+            // 留海
+            for (let i = 0; i < 5; i++) {
+                const fringeGeo = new THREE.BoxGeometry(3, 6, 2);
+                const fringe = new THREE.Mesh(fringeGeo, hairMaterial);
+                fringe.position.set(-4 + i * 2, 5, 8);
+                fringe.rotation.x = 0.3;
+                headGroup.add(fringe);
+            }
+        }
+
+        // 眼睛
+        const eyeGeo = new THREE.SphereGeometry(2, 12, 12);
+        const leftEye = new THREE.Mesh(eyeGeo, eyeMaterial);
+        leftEye.position.set(-4, 1, 8);
+        headGroup.add(leftEye);
+        const rightEye = new THREE.Mesh(eyeGeo, eyeMaterial);
+        rightEye.position.set(4, 1, 8);
+        headGroup.add(rightEye);
+
+        // 瞳孔
+        const pupilGeo = new THREE.SphereGeometry(1, 8, 8);
+        const pupilMat = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0x000000 });
+        const leftPupil = new THREE.Mesh(pupilGeo, pupilMat);
+        leftPupil.position.set(-4, 1, 9.5);
+        headGroup.add(leftPupil);
+        const rightPupil = new THREE.Mesh(pupilGeo, pupilMat);
+        rightPupil.position.set(4, 1, 9.5);
+        headGroup.add(rightPupil);
+
+        // 眉毛
+        const browGeo = new THREE.BoxGeometry(5, 1.5, 1);
+        const leftBrow = new THREE.Mesh(browGeo, hairMaterial);
+        leftBrow.position.set(-4, 5, 8.5);
+        leftBrow.rotation.z = playerId === 1 ? 0.2 : -0.1;
+        headGroup.add(leftBrow);
+        const rightBrow = new THREE.Mesh(browGeo, hairMaterial);
+        rightBrow.position.set(4, 5, 8.5);
+        rightBrow.rotation.z = playerId === 1 ? -0.2 : 0.1;
+        headGroup.add(rightBrow);
+
+        // 嘴巴
+        const mouthGeo = new THREE.BoxGeometry(4, 1, 0.5);
+        const mouthMat = new THREE.MeshStandardMaterial({ color: 0xCC6666 });
+        const mouth = new THREE.Mesh(mouthGeo, mouthMat);
+        mouth.position.set(0, -4, 9);
+        headGroup.add(mouth);
+
+        charGroup.add(headGroup);
+
+        // ===== 身体 =====
+        const torsoGroup = new THREE.Group();
+        torsoGroup.position.y = CHARACTER_CONFIG.HEIGHT - 35;
+
+        // 躯干 - 肌肉感造型
+        const chestGeo = new THREE.BoxGeometry(22, 18, 12);
+        const chest = new THREE.Mesh(chestGeo, mainMaterial);
+        chest.position.y = 3;
+        torsoGroup.add(chest);
+
+        // 腹肌
+        for (let row = 0; row < 2; row++) {
+            for (let col = 0; col < 2; col++) {
+                const abGeo = new THREE.BoxGeometry(8, 5, 3);
+                const ab = new THREE.Mesh(abGeo, secondaryMaterial);
+                ab.position.set(-6 + col * 12, -3 - row * 6, 7);
+                torsoGroup.add(ab);
+            }
+        }
+
+        // 肩膀护甲
+        const shoulderGeo = new THREE.SphereGeometry(7, 16, 16);
+        shoulderGeo.scale(1.2, 0.6, 1);
+        const leftShoulder = new THREE.Mesh(shoulderGeo, accentMaterial);
+        leftShoulder.position.set(-15, 10, 0);
+        torsoGroup.add(leftShoulder);
+        const rightShoulder = new THREE.Mesh(shoulderGeo, accentMaterial);
+        rightShoulder.position.set(15, 10, 0);
+        torsoGroup.add(rightShoulder);
+
+        // 腰带
+        const beltGeo = new THREE.BoxGeometry(24, 6, 14);
+        const belt = new THREE.Mesh(beltGeo, accentMaterial);
+        belt.position.y = -12;
+        torsoGroup.add(belt);
+
+        // 带扣
+        const buckleGeo = new THREE.BoxGeometry(8, 6, 3);
+        const buckle = new THREE.Mesh(buckleGeo, new THREE.MeshStandardMaterial({ color: 0xFFD700, metalness: 0.8, roughness: 0.2 }));
+        buckle.position.set(0, -12, 8);
+        torsoGroup.add(buckle);
+
+        charGroup.add(torsoGroup);
+
+        // ===== 手臂 =====
+        // 左臂
         const leftArmGroup = new THREE.Group();
         leftArmGroup.name = 'leftArm';
-        leftArmGroup.position.y = torso.position.y + CHARACTER_CONFIG.TORSO_HEIGHT / 2 - 5;
-        leftArmGroup.position.x = -CHARACTER_CONFIG.TORSO_WIDTH / 2 - CHARACTER_CONFIG.UPPER_ARM_WIDTH / 2;
+        leftArmGroup.position.set(-18, CHARACTER_CONFIG.HEIGHT - 28, 0);
 
-        const leftUpperArmGeo = new THREE.BoxGeometry(
-            CHARACTER_CONFIG.UPPER_ARM_WIDTH, CHARACTER_CONFIG.UPPER_ARM_HEIGHT, CHARACTER_CONFIG.UPPER_ARM_DEPTH
-        );
+        // 左上臂
+        const leftUpperArmGeo = new THREE.CylinderGeometry(5, 6, 16, 16);
         const leftUpperArm = new THREE.Mesh(leftUpperArmGeo, secondaryMaterial);
-        leftUpperArm.position.y = -CHARACTER_CONFIG.UPPER_ARM_HEIGHT / 2;
+        leftUpperArm.position.y = -8;
         leftUpperArm.name = 'leftUpperArm';
         leftArmGroup.add(leftUpperArm);
 
+        // 左前臂
         const leftLowerArmGroup = new THREE.Group();
         leftLowerArmGroup.name = 'leftLowerArm';
-        leftLowerArmGroup.position.y = -CHARACTER_CONFIG.UPPER_ARM_HEIGHT;
-
-        const leftLowerArmGeo = new THREE.BoxGeometry(
-            CHARACTER_CONFIG.LOWER_ARM_WIDTH, CHARACTER_CONFIG.LOWER_ARM_HEIGHT, CHARACTER_CONFIG.LOWER_ARM_DEPTH
-        );
+        leftLowerArmGroup.position.y = -16;
+        const leftLowerArmGeo = new THREE.CylinderGeometry(4, 5, 14, 16);
         const leftLowerArm = new THREE.Mesh(leftLowerArmGeo, secondaryMaterial);
-        leftLowerArm.position.y = -CHARACTER_CONFIG.LOWER_ARM_HEIGHT / 2;
+        leftLowerArm.position.y = -7;
         leftLowerArm.name = 'leftLowerArmMesh';
         leftLowerArmGroup.add(leftLowerArm);
+
+        // 左手
+        const leftHandGeo = new THREE.SphereGeometry(5, 16, 16);
+        const leftHand = new THREE.Mesh(leftHandGeo, skinMaterial);
+        leftHand.position.y = -15;
+        leftLowerArmGroup.add(leftHand);
+
         leftArmGroup.add(leftLowerArmGroup);
         charGroup.add(leftArmGroup);
 
+        // 右臂
         const rightArmGroup = new THREE.Group();
         rightArmGroup.name = 'rightArm';
-        rightArmGroup.position.y = leftArmGroup.position.y;
-        rightArmGroup.position.x = CHARACTER_CONFIG.TORSO_WIDTH / 2 + CHARACTER_CONFIG.UPPER_ARM_WIDTH / 2;
+        rightArmGroup.position.set(18, CHARACTER_CONFIG.HEIGHT - 28, 0);
 
-        const rightUpperArmGeo = new THREE.BoxGeometry(
-            CHARACTER_CONFIG.UPPER_ARM_WIDTH, CHARACTER_CONFIG.UPPER_ARM_HEIGHT, CHARACTER_CONFIG.UPPER_ARM_DEPTH
-        );
+        // 右上臂
+        const rightUpperArmGeo = new THREE.CylinderGeometry(5, 6, 16, 16);
         const rightUpperArm = new THREE.Mesh(rightUpperArmGeo, secondaryMaterial);
-        rightUpperArm.position.y = -CHARACTER_CONFIG.UPPER_ARM_HEIGHT / 2;
+        rightUpperArm.position.y = -8;
         rightUpperArm.name = 'rightUpperArm';
         rightArmGroup.add(rightUpperArm);
 
+        // 右前臂
         const rightLowerArmGroup = new THREE.Group();
         rightLowerArmGroup.name = 'rightLowerArm';
-        rightLowerArmGroup.position.y = -CHARACTER_CONFIG.UPPER_ARM_HEIGHT;
-
-        const rightLowerArmGeo = new THREE.BoxGeometry(
-            CHARACTER_CONFIG.LOWER_ARM_WIDTH, CHARACTER_CONFIG.LOWER_ARM_HEIGHT, CHARACTER_CONFIG.LOWER_ARM_DEPTH
-        );
+        rightLowerArmGroup.position.y = -16;
+        const rightLowerArmGeo = new THREE.CylinderGeometry(4, 5, 14, 16);
         const rightLowerArm = new THREE.Mesh(rightLowerArmGeo, secondaryMaterial);
-        rightLowerArm.position.y = -CHARACTER_CONFIG.LOWER_ARM_HEIGHT / 2;
+        rightLowerArm.position.y = -7;
         rightLowerArm.name = 'rightLowerArmMesh';
         rightLowerArmGroup.add(rightLowerArm);
+
+        // 右手
+        const rightHandGeo = new THREE.SphereGeometry(5, 16, 16);
+        const rightHand = new THREE.Mesh(rightHandGeo, skinMaterial);
+        rightHand.position.y = -15;
+        rightLowerArmGroup.add(rightHand);
+
         rightArmGroup.add(rightLowerArmGroup);
         charGroup.add(rightArmGroup);
 
-        const hipY = torso.position.y - CHARACTER_CONFIG.TORSO_HEIGHT / 2;
+        // ===== 腿部 =====
+        const hipY = CHARACTER_CONFIG.HEIGHT - 50;
 
+        // 左腿
         const leftLegGroup = new THREE.Group();
         leftLegGroup.name = 'leftLeg';
-        leftLegGroup.position.y = hipY;
-        leftLegGroup.position.x = -CHARACTER_CONFIG.TORSO_WIDTH / 4;
+        leftLegGroup.position.set(-7, hipY, 0);
 
-        const leftUpperLegGeo = new THREE.BoxGeometry(
-            CHARACTER_CONFIG.UPPER_LEG_WIDTH, CHARACTER_CONFIG.UPPER_LEG_HEIGHT, CHARACTER_CONFIG.UPPER_LEG_DEPTH
-        );
-        const leftUpperLeg = new THREE.Mesh(leftUpperLegGeo, secondaryMaterial);
-        leftUpperLeg.position.y = -CHARACTER_CONFIG.UPPER_LEG_HEIGHT / 2;
+        // 左大腿
+        const leftUpperLegGeo = new THREE.CylinderGeometry(7, 6, 20, 16);
+        const leftUpperLeg = new THREE.Mesh(leftUpperLegGeo, mainMaterial);
+        leftUpperLeg.position.y = -10;
         leftUpperLeg.name = 'leftUpperLeg';
         leftLegGroup.add(leftUpperLeg);
 
+        // 左小腿
         const leftLowerLegGroup = new THREE.Group();
         leftLowerLegGroup.name = 'leftLowerLeg';
-        leftLowerLegGroup.position.y = -CHARACTER_CONFIG.UPPER_LEG_HEIGHT;
-
-        const leftLowerLegGeo = new THREE.BoxGeometry(
-            CHARACTER_CONFIG.LOWER_LEG_WIDTH, CHARACTER_CONFIG.LOWER_LEG_HEIGHT, CHARACTER_CONFIG.LOWER_LEG_DEPTH
-        );
-        const leftLowerLeg = new THREE.Mesh(leftLowerLegGeo, secondaryMaterial);
-        leftLowerLeg.position.y = -CHARACTER_CONFIG.LOWER_LEG_HEIGHT / 2;
+        leftLowerLegGroup.position.y = -20;
+        const leftLowerLegGeo = new THREE.CylinderGeometry(5, 6, 18, 16);
+        const leftLowerLeg = new THREE.Mesh(leftLowerLegGeo, mainMaterial);
+        leftLowerLeg.position.y = -9;
         leftLowerLeg.name = 'leftLowerLegMesh';
         leftLowerLegGroup.add(leftLowerLeg);
+
+        // 左脚
+        const leftFootGeo = new THREE.BoxGeometry(8, 4, 14);
+        const leftFoot = new THREE.Mesh(leftFootGeo, accentMaterial);
+        leftFoot.position.set(0, -20, 2);
+        leftLowerLegGroup.add(leftFoot);
+
         leftLegGroup.add(leftLowerLegGroup);
         charGroup.add(leftLegGroup);
 
+        // 右腿
         const rightLegGroup = new THREE.Group();
         rightLegGroup.name = 'rightLeg';
-        rightLegGroup.position.y = hipY;
-        rightLegGroup.position.x = CHARACTER_CONFIG.TORSO_WIDTH / 4;
+        rightLegGroup.position.set(7, hipY, 0);
 
-        const rightUpperLegGeo = new THREE.BoxGeometry(
-            CHARACTER_CONFIG.UPPER_LEG_WIDTH, CHARACTER_CONFIG.UPPER_LEG_HEIGHT, CHARACTER_CONFIG.UPPER_LEG_DEPTH
-        );
-        const rightUpperLeg = new THREE.Mesh(rightUpperLegGeo, secondaryMaterial);
-        rightUpperLeg.position.y = -CHARACTER_CONFIG.UPPER_LEG_HEIGHT / 2;
+        // 右大腿
+        const rightUpperLegGeo = new THREE.CylinderGeometry(7, 6, 20, 16);
+        const rightUpperLeg = new THREE.Mesh(rightUpperLegGeo, mainMaterial);
+        rightUpperLeg.position.y = -10;
         rightUpperLeg.name = 'rightUpperLeg';
         rightLegGroup.add(rightUpperLeg);
 
+        // 右小腿
         const rightLowerLegGroup = new THREE.Group();
         rightLowerLegGroup.name = 'rightLowerLeg';
-        rightLowerLegGroup.position.y = -CHARACTER_CONFIG.UPPER_LEG_HEIGHT;
-
-        const rightLowerLegGeo = new THREE.BoxGeometry(
-            CHARACTER_CONFIG.LOWER_LEG_WIDTH, CHARACTER_CONFIG.LOWER_LEG_HEIGHT, CHARACTER_CONFIG.LOWER_LEG_DEPTH
-        );
-        const rightLowerLeg = new THREE.Mesh(rightLowerLegGeo, secondaryMaterial);
-        rightLowerLeg.position.y = -CHARACTER_CONFIG.LOWER_LEG_HEIGHT / 2;
+        rightLowerLegGroup.position.y = -20;
+        const rightLowerLegGeo = new THREE.CylinderGeometry(5, 6, 18, 16);
+        const rightLowerLeg = new THREE.Mesh(rightLowerLegGeo, mainMaterial);
+        rightLowerLeg.position.y = -9;
         rightLowerLeg.name = 'rightLowerLegMesh';
         rightLowerLegGroup.add(rightLowerLeg);
+
+        // 右脚
+        const rightFootGeo = new THREE.BoxGeometry(8, 4, 14);
+        const rightFoot = new THREE.Mesh(rightFootGeo, accentMaterial);
+        rightFoot.position.set(0, -20, 2);
+        rightLowerLegGroup.add(rightFoot);
+
         rightLegGroup.add(rightLowerLegGroup);
         charGroup.add(rightLegGroup);
 
+        // 玩家标识（悬浮）
         const canvas = document.createElement('canvas');
         canvas.width = 128; canvas.height = 128;
         const ctx = canvas.getContext('2d');
-        ctx.fillStyle = 'white'; ctx.font = 'bold 80px sans-serif';
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 60px sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(`P${playerId}`, 64, 64);
 
         const texture = new THREE.CanvasTexture(canvas);
         const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
         const sprite = new THREE.Sprite(spriteMaterial);
-        sprite.scale.set(30, 30, 1);
-        sprite.position.y = CHARACTER_CONFIG.HEIGHT + 15;
+        sprite.scale.set(25, 25, 1);
+        sprite.position.y = CHARACTER_CONFIG.HEIGHT + 20;
         charGroup.add(sprite);
 
+        // 旋转角色使其面对面
+        // 玩家1在左边(-160)，朝右看玩家2
+        // 玩家2在右边(160)，朝左看玩家1
+        if (playerId === 1) {
+            charGroup.rotation.y = Math.PI / 2;
+        } else {
+            charGroup.rotation.y = Math.PI / 2;
+            charGroup.rotation.y += Math.PI;
+        }
+
         charGroup.bodyParts = {
-            head, torso,
+            head: headGroup, torso: torsoGroup,
             leftArm: leftArmGroup, rightArm: rightArmGroup,
             leftUpperArm, rightUpperArm,
             leftLowerArm: leftLowerArmGroup, rightLowerArm: rightLowerArmGroup,
@@ -329,45 +489,91 @@ class Renderer {
 
         const idleBreath = Math.sin(t * 0.003) * 0.02;
         const idleHeadTilt = Math.sin(t * 0.002) * 0.05;
-        const walkCycle = t * 0.01 * (animState.params.walkSpeed || 1.0);
-        const legSwing = Math.sin(walkCycle) * 0.4;
-        const armSwing = Math.sin(walkCycle + Math.PI) * 0.3;
-        const attackProgress = animState.current === 'attack' ? Math.min(animState.timers.attack / 300, 1.0) : 0;
-        const attackSwing = attackProgress < 0.5 ? Math.sin(attackProgress * Math.PI * 2) : 0;
-        const hitProgress = animState.current === 'hit' ? Math.min(animState.timers.hit / 250, 1.0) : 0;
-        const hitRecoil = (1 - hitProgress) * 0.3;
+        const walkCycle = t * 0.015 * (animState.params.walkSpeed || 1.0);
+        const legSwing = Math.sin(walkCycle) * 0.5;
+        const armSwing = Math.sin(walkCycle + Math.PI) * 0.4;
+        const attackProgress = animState.current === 'attack' ? Math.min(animState.timers.attack / 400, 1.0) : 0;
+        const hitProgress = animState.current === 'hit' ? Math.min(animState.timers.hit / 300, 1.0) : 0;
 
+        // ===== 呼吸和头部动画 =====
         parts.head.rotation.x = idleHeadTilt;
-        parts.head.rotation.y = Math.sin(t * 0.001) * 0.03;
+        parts.head.rotation.y = Math.sin(t * 0.001) * 0.02;
+        // 呼吸时身体轻微起伏
+        parts.torso.position.y = idleBreath * 3;
 
         if (animState.current === 'attack') {
-            parts.rightArm.rotation.x = -attackSwing * 1.5;
-            parts.rightLowerArm.rotation.x = -attackSwing * 0.5;
-            parts.leftArm.rotation.x = attackSwing * 0.3;
+            // ===== 拳皇风格攻击动画 =====
+            // 攻击分为：蓄力 -> 出拳 -> 收回
+            if (attackProgress < 0.2) {
+                // 蓄力阶段 - 身体扭转，手臂回收
+                const charge = attackProgress / 0.2;
+                parts.torso.rotation.y = -Math.sin(charge * Math.PI / 2) * 0.4;
+                parts.rightArm.rotation.z = Math.sin(charge * Math.PI / 2) * 0.5;
+                parts.rightArm.rotation.x = Math.sin(charge * Math.PI / 2) * 0.3;
+                parts.leftArm.rotation.x = -0.2;
+            } else if (attackProgress < 0.5) {
+                // 出拳阶段 - 快速出击！
+                const swing = (attackProgress - 0.2) / 0.3;
+                const swingEase = swing < 0.5 ? 2 * swing * swing : 1 - Math.pow(-2 * swing + 2, 2) / 2;
+
+                parts.torso.rotation.y = Math.sin(swingEase * Math.PI) * 0.3;
+                parts.rightArm.rotation.z = -swingEase * 0.8;
+                parts.rightArm.rotation.x = -swingEase * 1.2;
+                parts.rightLowerArm.rotation.x = -swingEase * 0.5;
+                parts.leftArm.rotation.x = 0.3 + swingEase * 0.3;
+                parts.rightLeg.rotation.z = -swingEase * 0.2;
+            } else {
+                // 收回阶段
+                const recover = (attackProgress - 0.5) / 0.5;
+                parts.torso.rotation.y = (1 - recover) * 0.3;
+                parts.rightArm.rotation.z = -(1 - recover) * 0.8;
+                parts.rightArm.rotation.x = -(1 - recover) * 1.2;
+                parts.rightLowerArm.rotation.x = -(1 - recover) * 0.5;
+            }
         } else if (animState.current === 'walk') {
+            // ===== 走路动画 =====
+            parts.torso.rotation.y = Math.sin(walkCycle) * 0.05;
             parts.rightArm.rotation.x = armSwing;
             parts.leftArm.rotation.x = -armSwing;
-        } else {
-            parts.rightArm.rotation.x = Math.sin(t * 0.001) * 0.05;
-            parts.leftArm.rotation.x = -Math.sin(t * 0.001) * 0.05;
-        }
-
-        if (animState.current === 'walk') {
+            parts.rightArm.rotation.z = Math.abs(armSwing) * 0.1;
+            parts.leftArm.rotation.z = -Math.abs(armSwing) * 0.1;
             parts.rightLeg.rotation.x = legSwing;
             parts.leftLeg.rotation.x = -legSwing;
-            parts.rightLowerLeg.rotation.x = Math.max(0, -legSwing) * 0.3;
-            parts.leftLowerLeg.rotation.x = Math.max(0, legSwing) * 0.3;
-        } else {
-            parts.rightLeg.rotation.x = 0;
-            parts.leftLeg.rotation.x = 0;
-            parts.rightLowerLeg.rotation.x = 0;
-            parts.leftLowerLeg.rotation.x = 0;
-        }
+            parts.rightLowerLeg.rotation.x = Math.max(0, -legSwing) * 0.4;
+            parts.leftLowerLeg.rotation.x = Math.max(0, legSwing) * 0.4;
+            // 走路时身体重心起伏
+            parts.torso.position.y = idleBreath * 3 + Math.abs(Math.sin(walkCycle)) * 3;
+        } else if (animState.current === 'hit') {
+            // ===== 受击动画 =====
+            const hitEase = hitProgress < 0.3 ? hitProgress / 0.3 : 1 - (hitProgress - 0.3) / 0.7;
+            const hitAmount = hitEase;
 
-        if (animState.current === 'hit') {
-            charGroup.rotation.x = hitRecoil * 0.2;
-            charGroup.position.y = Math.sin(hitProgress * Math.PI) * 5;
+            // 整个角色向后仰
+            charGroup.rotation.x = hitAmount * 0.5;
+            charGroup.position.y = Math.sin(hitProgress * Math.PI) * 10;
+
+            // 手臂张开
+            parts.leftArm.rotation.x = -hitAmount * 0.8;
+            parts.rightArm.rotation.x = -hitAmount * 0.8;
+            parts.leftArm.rotation.z = hitAmount * 0.5;
+            parts.rightArm.rotation.z = -hitAmount * 0.5;
+
+            // 头部向后
+            parts.head.rotation.x = -hitAmount * 0.3;
         } else {
+            // ===== 待机动画 =====
+            // 手臂自然摆动
+            parts.rightArm.rotation.x = Math.sin(t * 0.0015) * 0.08;
+            parts.leftArm.rotation.x = -Math.sin(t * 0.0015 + 0.5) * 0.08;
+            parts.rightArm.rotation.z = Math.sin(t * 0.002) * 0.03;
+            parts.leftArm.rotation.z = -Math.sin(t * 0.002 + 0.3) * 0.03;
+
+            // 腿部轻微调整
+            parts.rightLeg.rotation.x = Math.sin(t * 0.001) * 0.02;
+            parts.leftLeg.rotation.x = -Math.sin(t * 0.001 + 1) * 0.02;
+
+            // 重置其他旋转
+            parts.torso.rotation.y = 0;
             charGroup.rotation.x = 0;
             charGroup.position.y = 0;
         }
