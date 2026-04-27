@@ -5,125 +5,136 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>物理竞技场 - Physics Arena</title>
     <link rel="stylesheet" href="css/style.css">
+    <!-- 添加 Three.js 用于 3D 渲染 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-    <div id="game-container">
-        <div id="hud-top">
-            <div id="player1-status" class="player-status">
-                <span class="player-name">玩家 1</span>
-                <div class="energy-bar">
-                    <div class="energy-fill" style="width: 100%"></div>
-                </div>
-                <span class="energy-text">10 / 10</span>
-                <div id="player1-heat-engine" class="heat-engine-display"></div>
-            </div>
-            <div id="game-info">
-                <span id="turn-indicator">回合 1</span>
-            </div>
-            <div id="player2-status" class="player-status">
-                <span class="player-name">玩家 2</span>
-                <div class="energy-bar">
-                    <div class="energy-fill" style="width: 100%"></div>
-                </div>
-                <span class="energy-text">10 / 10</span>
-                <div id="player2-heat-engine" class="heat-engine-display"></div>
-            </div>
-        </div>
+    <!-- 3D 场景容器 -->
+    <div id="three-container"></div>
 
-        <div id="main-game-area">
-            <div id="card-params-panel" class="side-panel">
-                <h3>卡片变化参数</h3>
-                <div id="card-params-content">
-                    <div class="param-item">
-                        <span class="param-label">当前卡片</span>
-                        <span class="param-value" id="current-card-name">-</span>
+    <!-- 2D 游戏 UI 覆盖层 -->
+    <div id="game-overlay">
+        <div id="game-container">
+            <div id="hud-top">
+                <div id="player1-status" class="player-status">
+                    <span class="player-name">玩家 1</span>
+                    <div class="energy-bar">
+                        <div class="energy-fill" style="width: 100%"></div>
                     </div>
-                    <div class="param-item">
-                        <span class="param-label">卡片类型</span>
-                        <span class="param-value" id="current-card-type">-</span>
+                    <span class="energy-text">10 / 10</span>
+                    <div id="player1-heat-engine" class="heat-engine-display"></div>
+                </div>
+                <div id="game-info">
+                    <span id="turn-indicator">回合 1</span>
+                </div>
+                <div id="player2-status" class="player-status">
+                    <span class="player-name">玩家 2</span>
+                    <div class="energy-bar">
+                        <div class="energy-fill" style="width: 100%"></div>
                     </div>
-                    <div class="param-item">
-                        <span class="param-label">物理公式</span>
-                        <span class="param-value" id="current-card-formula">-</span>
-                    </div>
-                    <div class="param-item">
-                        <span class="param-label">效果描述</span>
-                        <span class="param-value" id="current-card-effect">-</span>
-                    </div>
+                    <span class="energy-text">10 / 10</span>
+                    <div id="player2-heat-engine" class="heat-engine-display"></div>
                 </div>
             </div>
-            
-            <div id="arena-container">
-                <canvas id="game-canvas"></canvas>
-            </div>
-            
-            <div id="physics-params-panel" class="side-panel">
-                <h3>物理参数</h3>
-                <div id="physics-params-content">
-                    <div class="player-params" id="player1-params">
-                        <h4>玩家 1</h4>
-                        <div class="param-item">
-                            <span class="param-label">位置 (x, y)</span>
-                            <span class="param-value" id="p1-position">(0, 0)</span>
-                        </div>
-                        <div class="param-item">
-                            <span class="param-label">速度 (x, y)</span>
-                            <span class="param-value" id="p1-velocity">(0, 0)</span>
-                        </div>
-                        <div class="param-item">
-                            <span class="param-label">质量</span>
-                            <span class="param-value" id="p1-mass">70 kg</span>
-                        </div>
-                        <div class="param-item">
-                            <span class="param-label">距中心距离</span>
-                            <span class="param-value" id="p1-distance">0</span>
-                        </div>
-                    </div>
-                    <div class="player-params" id="player2-params">
-                        <h4>玩家 2</h4>
-                        <div class="param-item">
-                            <span class="param-label">位置 (x, y)</span>
-                            <span class="param-value" id="p2-position">(0, 0)</span>
-                        </div>
-                        <div class="param-item">
-                            <span class="param-label">速度 (x, y)</span>
-                            <span class="param-value" id="p2-velocity">(0, 0)</span>
-                        </div>
-                        <div class="param-item">
-                            <span class="param-label">质量</span>
-                            <span class="param-value" id="p2-mass">70 kg</span>
-                        </div>
-                        <div class="param-item">
-                            <span class="param-label">距中心距离</span>
-                            <span class="param-value" id="p2-distance">0</span>
-                        </div>
-                    </div>
-                    
-                    <div class="arena-params" id="arena-params">
-                        <h4>场地物理参数</h4>
-                        <div class="param-item">
-                            <span class="param-label">场地状态</span>
-                            <span class="param-value" id="arena-status">正常</span>
-                        </div>
-                        <div class="param-item">
-                            <span class="param-label">基础摩擦因数</span>
-                            <span class="param-value" id="arena-friction">4.5</span>
-                        </div>
-                        <div class="param-item">
-                            <span class="param-label">场地特效</span>
-                            <span class="param-value" id="arena-effects">无</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
 
-        <div id="hand-container">
-            <div id="cards-area">
-                <div id="cards-hand"></div>
+            <div id="main-game-area">
+                <div id="card-params-panel" class="side-panel">
+                    <h3>卡片变化参数</h3>
+                    <div id="card-params-content">
+                        <div class="param-item">
+                            <span class="param-label">当前卡片</span>
+                            <span class="param-value" id="current-card-name">-</span>
+                        </div>
+                        <div class="param-item">
+                            <span class="param-label">卡片类型</span>
+                            <span class="param-value" id="current-card-type">-</span>
+                        </div>
+                        <div class="param-item">
+                            <span class="param-label">物理公式</span>
+                            <span class="param-value" id="current-card-formula">-</span>
+                        </div>
+                        <div class="param-item">
+                            <span class="param-label">效果描述</span>
+                            <span class="param-value" id="current-card-effect">-</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="arena-container">
+                    <!-- 2D Canvas 仍然保留用于调试或后备 -->
+                    <canvas id="game-canvas"></canvas>
+                    <!-- 3D 交互区域覆盖层 -->
+                    <div id="arena-interaction-layer"></div>
+                </div>
+                
+                <div id="physics-params-panel" class="side-panel">
+                    <h3>物理参数</h3>
+                    <div id="physics-params-content">
+                        <div class="player-params" id="player1-params">
+                            <h4>玩家 1</h4>
+                            <div class="param-item">
+                                <span class="param-label">位置 (x, y)</span>
+                                <span class="param-value" id="p1-position">(0, 0)</span>
+                            </div>
+                            <div class="param-item">
+                                <span class="param-label">速度 (x, y)</span>
+                                <span class="param-value" id="p1-velocity">(0, 0)</span>
+                            </div>
+                            <div class="param-item">
+                                <span class="param-label">质量</span>
+                                <span class="param-value" id="p1-mass">70 kg</span>
+                            </div>
+                            <div class="param-item">
+                                <span class="param-label">距中心距离</span>
+                                <span class="param-value" id="p1-distance">0</span>
+                            </div>
+                        </div>
+                        <div class="player-params" id="player2-params">
+                            <h4>玩家 2</h4>
+                            <div class="param-item">
+                                <span class="param-label">位置 (x, y)</span>
+                                <span class="param-value" id="p2-position">(0, 0)</span>
+                            </div>
+                            <div class="param-item">
+                                <span class="param-label">速度 (x, y)</span>
+                                <span class="param-value" id="p2-velocity">(0, 0)</span>
+                            </div>
+                            <div class="param-item">
+                                <span class="param-label">质量</span>
+                                <span class="param-value" id="p2-mass">70 kg</span>
+                            </div>
+                            <div class="param-item">
+                                <span class="param-label">距中心距离</span>
+                                <span class="param-value" id="p2-distance">0</span>
+                            </div>
+                        </div>
+                        
+                        <div class="arena-params" id="arena-params">
+                            <h4>场地物理参数</h4>
+                            <div class="param-item">
+                                <span class="param-label">场地状态</span>
+                                <span class="param-value" id="arena-status">正常</span>
+                            </div>
+                            <div class="param-item">
+                                <span class="param-label">基础摩擦因数</span>
+                                <span class="param-value" id="arena-friction">4.5</span>
+                            </div>
+                            <div class="param-item">
+                                <span class="param-label">场地特效</span>
+                                <span class="param-value" id="arena-effects">无</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div style="display: flex; gap: 10px;">
-                <button id="end-turn-btn">结束回合</button>
+
+            <div id="hand-container">
+                <div id="cards-area">
+                    <div id="cards-hand"></div>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button id="end-turn-btn">结束回合</button>
+                </div>
             </div>
         </div>
     </div>

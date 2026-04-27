@@ -6,17 +6,40 @@
 
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 100%);
+    background: #0a0a1a;
     color: #fff;
-    padding: 20px;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+}
+
+/* 隐藏不需要的容器 */
+#three-container {
+    display: none;
+}
+
+
+/* 游戏 UI 容器 */
+#game-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px;
+    background: #0a0a1a;
 }
 
 #game-container {
     display: flex;
     flex-direction: column;
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 10px;
+    width: 100%;
+    max-width: 1400px;
+    height: 100%;
 }
 
 #hud-top {
@@ -24,9 +47,10 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 10px 20px;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.7);
     border-radius: 10px;
     margin-bottom: 10px;
+    border: 1px solid rgba(30, 144, 255, 0.3);
 }
 
 .player-status {
@@ -34,15 +58,15 @@ body {
     flex-direction: column;
     align-items: center;
     gap: 5px;
-    min-width: 150px;
+    min-width: 180px; /* Slightly wider */
     padding: 10px;
     border-radius: 8px;
     transition: all 0.3s ease;
 }
 
 .player-status.current-turn {
-    background: rgba(255, 215, 0, 0.2);
-    box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+    background: rgba(255, 215, 0, 0.25);
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
     border: 2px solid #FFD700;
 }
 
@@ -51,17 +75,18 @@ body {
 }
 
 .player-name {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: bold;
     color: #1E90FF;
 }
 
 .energy-bar {
     width: 100%;
-    height: 20px;
-    background: #333;
+    height: 22px;
+    background: rgba(51, 51, 51, 0.8);
     border-radius: 10px;
     overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .energy-fill {
@@ -71,8 +96,8 @@ body {
 }
 
 .energy-text {
-    font-size: 12px;
-    color: #aaa;
+    font-size: 13px;
+    color: #ccc;
 }
 
 #game-info {
@@ -80,30 +105,35 @@ body {
 }
 
 #turn-indicator {
-    font-size: 18px;
+    font-size: 20px;
     font-weight: bold;
     color: #1E90FF;
+    text-shadow: 0 0 10px rgba(30, 144, 255, 0.5);
 }
 
 #main-game-area {
     display: flex;
     gap: 10px;
     align-items: stretch;
+    flex: 1;
+    min-height: 0; /* Important for flexbox scrolling */
 }
 
 .side-panel {
-    width: 220px;
-    background: rgba(0, 0, 0, 0.5);
+    width: 240px; /* Slightly wider */
+    background: rgba(0, 0, 0, 0.75);
     border-radius: 10px;
     padding: 15px;
     display: flex;
     flex-direction: column;
+    backdrop-filter: blur(5px);
+    border: 1px solid rgba(30, 144, 255, 0.3);
 }
 
 .side-panel h3 {
     color: #1E90FF;
     margin-bottom: 15px;
-    font-size: 16px;
+    font-size: 17px;
     text-align: center;
     border-bottom: 1px solid rgba(30, 144, 255, 0.3);
     padding-bottom: 8px;
@@ -113,29 +143,30 @@ body {
     display: flex;
     flex-direction: column;
     gap: 15px;
+    overflow-y: auto;
 }
 
 .player-params {
-    background: rgba(30, 144, 255, 0.1);
+    background: rgba(30, 144, 255, 0.15);
     border-radius: 8px;
-    padding: 10px;
+    padding: 12px;
 }
 
 .player-params h4 {
     color: #FFD700;
     margin-bottom: 10px;
-    font-size: 14px;
+    font-size: 15px;
 }
 
 .param-item {
     display: flex;
     justify-content: space-between;
     margin-bottom: 8px;
-    font-size: 12px;
+    font-size: 13px;
 }
 
 .param-label {
-    color: #aaa;
+    color: #bbb;
 }
 
 .param-value {
@@ -145,6 +176,7 @@ body {
 
 #card-params-content {
     flex: 1;
+    overflow-y: auto;
 }
 
 #arena-container {
@@ -155,10 +187,24 @@ body {
     background: rgba(0, 0, 0, 0.3);
     border-radius: 15px;
     overflow: hidden;
+    position: relative;
 }
 
 #game-canvas {
     border-radius: 10px;
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+#arena-interaction-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: auto; /* Capture interactions for aiming */
+    cursor: crosshair;
 }
 
 #hand-container {
@@ -166,14 +212,17 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 15px 20px;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.75);
     border-radius: 10px;
     margin-top: 10px;
+    backdrop-filter: blur(5px);
+    border: 1px solid rgba(30, 144, 255, 0.3);
 }
 
 #cards-area {
     flex: 1;
     overflow-x: auto;
+    padding: 5px 0;
 }
 
 #cards-hand {
@@ -190,7 +239,7 @@ body {
     border: 2px solid #1E90FF;
     border-radius: 8px;
     cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
     display: flex;
     flex-direction: column;
     padding: 8px;
@@ -198,8 +247,9 @@ body {
 }
 
 .card:hover {
-    transform: translateY(-10px);
-    box-shadow: 0 10px 30px rgba(30, 144, 255, 0.5);
+    transform: translateY(-10px) scale(1.05);
+    box-shadow: 0 10px 30px rgba(30, 144, 255, 0.6);
+    border-color: #4db8ff;
 }
 
 .card.disabled {
@@ -234,11 +284,11 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 32px;
+    font-size: 36px;
 }
 
 .card-name {
-    font-size: 10px;
+    font-size: 11px;
     text-align: center;
     color: #fff;
     margin-top: auto;
@@ -258,7 +308,7 @@ body {
 
 #end-turn-btn:hover {
     transform: scale(1.05);
-    box-shadow: 0 5px 20px rgba(30, 144, 255, 0.5);
+    box-shadow: 0 5px 20px rgba(30, 144, 255, 0.6);
 }
 
 #end-turn-btn:disabled {
@@ -278,6 +328,7 @@ body {
     border-radius: 10px;
     border: 2px solid #1E90FF;
     min-width: 300px;
+    z-index: 100;
 }
 
 #card-detail.hidden {
@@ -290,11 +341,12 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.8);
+    background: rgba(0, 0, 0, 0.85);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1000;
+    pointer-events: auto;
 }
 
 #game-over-modal.hidden {
@@ -307,6 +359,7 @@ body {
     border-radius: 15px;
     text-align: center;
     border: 3px solid #FFD700;
+    box-shadow: 0 0 50px rgba(255, 215, 0, 0.3);
 }
 
 .modal-content h2 {
@@ -340,11 +393,12 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.8);
+    background: rgba(0, 0, 0, 0.85);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1000;
+    pointer-events: auto;
 }
 
 #discard-modal.hidden {
@@ -366,7 +420,7 @@ body {
 #discard-count, #discard-selected {
     font-size: 16px;
     margin-bottom: 10px;
-    color: #aaa;
+    color: #ccc;
 }
 
 #discard-cards-area {
@@ -409,4 +463,28 @@ body {
     transform: scale(0.95);
     cursor: not-allowed;
     opacity: 0.6;
+}
+
+/* 卡片指南 - 调整位置以适应全屏 */
+#card-guide {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(26, 26, 46, 0.95);
+    padding: 20px;
+    border-radius: 10px;
+    color: #fff;
+    max-width: 90%;
+    max-height: 30vh;
+    overflow-y: auto;
+    z-index: 20;
+    pointer-events: auto;
+    backdrop-filter: blur(5px);
+    border: 1px solid rgba(30, 144, 255, 0.3);
+}
+
+#card-guide h3 {
+    color: #1E90FF;
+    margin-top: 0;
 }

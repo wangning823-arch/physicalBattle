@@ -25,8 +25,8 @@ class Game {
     }
 
     initGame() {
-        this.physics.createPlayer(-160, 0, 1);
-        this.physics.createPlayer(160, 0, 2);
+        this.physics.createPlayer(-160, 0, 0, 1);
+        this.physics.createPlayer(160, 0, 0, 2);
         this.players[0].charge = 0; // 初始化玩家1电荷为0
         this.players[0].chargeDuration = 0; // 电荷持续回合数
         this.players[1].charge = 0; // 初始化玩家2电荷为0
@@ -40,11 +40,9 @@ class Game {
     }
 
     dealCards() {
-        console.log('Dealing cards...');
         this.players.forEach((player, index) => {
             const drawn = this.cardSystem.draw(GAME_CONFIG.CARDS_PER_TURN);
             player.cards = drawn;
-            console.log(`Player ${player.id} got ${drawn.length} cards`, drawn);
         });
     }
 
@@ -74,13 +72,13 @@ class Game {
         return true;
     }
 
-    confirmAim(targetX, targetY) {
+    confirmAim(targetX, targetY, targetZ = 0) {
         if (!this.aimingState.active) return false;
         
         const { card, cardIndex, playerId } = this.aimingState;
         const player = this.players.find(p => p.id === playerId);
         
-        // 检查目标位置是否在圆形场地内
+        // 检查目标位置是否在球形场地内
         // 如果是领域类卡牌，还要考虑领域自身的半径
         let maxAllowedRadius = GAME_CONFIG.ARENA_RADIUS;
         if (card.effect.radius) {
@@ -90,7 +88,7 @@ class Game {
             maxAllowedRadius = Math.max(0, maxAllowedRadius);
         }
         
-        const targetDist = Math.sqrt(targetX ** 2 + targetY ** 2);
+        const targetDist = Math.sqrt(targetX ** 2 + targetY ** 2 + targetZ ** 2);
         if (targetDist > maxAllowedRadius) {
             console.log('目标位置在场地外，无法放置！');
             return false;
@@ -98,7 +96,7 @@ class Game {
         
         player.energy -= card.cost;
         this.lastPlayedCard = card;
-        this.executeCard(card, playerId, { x: targetX, y: targetY });
+        this.executeCard(card, playerId, { x: targetX, y: targetY, z: targetZ });
         player.cards.splice(cardIndex, 1);
         
         this.aimingState = { active: false, card: null, cardIndex: -1, playerId: 0 };
@@ -132,19 +130,23 @@ class Game {
                 if (targetPhysics && aimTarget && selfPhysics) {
                     const dx = aimTarget.x - selfPhysics.position.x;
                     const dy = aimTarget.y - selfPhysics.position.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const dz = aimTarget.z - selfPhysics.position.z;
+                    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
                     if (dist > 0) {
                         const impulseX = (dx / dist) * card.effect.impulse;
                         const impulseY = (dy / dist) * card.effect.impulse;
-                        this.physics.applyImpulse(targetId, impulseX, impulseY);
+                        const impulseZ = (dz / dist) * card.effect.impulse;
+                        this.physics.applyImpulse(targetId, impulseX, impulseY, impulseZ);
                         
                         // 添加动量冲击激光特效
                         this.physics.addTempEffect({
                             type: 'laser',
                             startX: selfPhysics.position.x,
                             startY: selfPhysics.position.y,
+                            startZ: selfPhysics.position.z,
                             endX: targetPhysics.position.x,
                             endY: targetPhysics.position.y,
+                            endZ: targetPhysics.position.z,
                             life: 500,
                             maxLife: 500
                         });
@@ -155,11 +157,13 @@ class Game {
                 if (selfPhysics && aimTarget) {
                     const dx = aimTarget.x - selfPhysics.position.x;
                     const dy = aimTarget.y - selfPhysics.position.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const dz = aimTarget.z - selfPhysics.position.z;
+                    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
                     if (dist > 0) {
                         const impulseX = (dx / dist) * card.effect.impulse;
                         const impulseY = (dy / dist) * card.effect.impulse;
-                        this.physics.applyImpulse(playerId, impulseX, impulseY);
+                        const impulseZ = (dz / dist) * card.effect.impulse;
+                        this.physics.applyImpulse(playerId, impulseX, impulseY, impulseZ);
                     }
                 }
                 break;
@@ -169,6 +173,7 @@ class Game {
                         type: 'gravityField',
                         x: aimTarget.x,
                         y: aimTarget.y,
+                        z: aimTarget.z,
                         radius: card.effect.radius,
                         strength: card.effect.strength,
                         duration: card.effect.duration
@@ -181,6 +186,7 @@ class Game {
                         type: 'repulsionField',
                         x: selfPhysics.position.x,
                         y: selfPhysics.position.y,
+                        z: selfPhysics.position.z,
                         radius: card.effect.radius,
                         strength: -card.effect.strength,
                         duration: card.effect.duration
@@ -194,6 +200,7 @@ class Game {
                         type: 'airFrictionZone',
                         x: aimTarget.x,
                         y: aimTarget.y,
+                        z: aimTarget.z,
                         radius: card.effect.radius,
                         airFriction: card.effect.airFriction,
                         duration: card.effect.duration
@@ -220,17 +227,20 @@ class Game {
                 if (targetPhysics && aimTarget) {
                     const dx = aimTarget.x - selfPhysics.position.x;
                     const dy = aimTarget.y - selfPhysics.position.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const dz = aimTarget.z - selfPhysics.position.z;
+                    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
                     if (dist > 0) {
                         const impulseX = (dx / dist) * card.effect.impulse;
                         const impulseY = (dy / dist) * card.effect.impulse;
-                        this.physics.applyImpulse(targetId, impulseX, impulseY);
+                        const impulseZ = (dz / dist) * card.effect.impulse;
+                        this.physics.applyImpulse(targetId, impulseX, impulseY, impulseZ);
                         
                         // 添加爆裂冲击特效（更大更持久）
                         this.physics.addTempEffect({
                             type: 'momentum_blast',
                             x: targetPhysics.position.x,
                             y: targetPhysics.position.y,
+                            z: targetPhysics.position.z,
                             life: 700,
                             maxLife: 700
                         });
@@ -238,14 +248,17 @@ class Game {
                 }
                 break;
             case 'anchor':
-                if (selfPlayer) {
+                if (selfPlayer && selfPhysics) {
+                    // 保存当前位置作为锚点
+                    selfPlayer.anchorPosition = { 
+                        x: selfPhysics.position.x, 
+                        y: selfPhysics.position.y 
+                    };
                     selfPlayer.effects.push({
                         type: 'anchor',
                         remainingTurns: card.effect.duration
                     });
-                    if (selfPhysics) {
-                        Matter.Body.setVelocity(selfPhysics, { x: 0, y: 0 });
-                    }
+                    this.physics.setPlayerVelocity(selfPlayer.id, 0, 0, 0);
                 }
                 break;
             case 'rigid_connection':
@@ -264,6 +277,7 @@ class Game {
                         type: 'dampingField',
                         x: aimTarget.x,
                         y: aimTarget.y,
+                        z: aimTarget.z,
                         radius: card.effect.radius,
                         duration: card.effect.duration
                     });
@@ -293,6 +307,7 @@ class Game {
                             type: 'ice_reset',
                             x: targetPhysics.position.x,
                             y: targetPhysics.position.y,
+                            z: targetPhysics.position.z,
                             life: 800,
                             maxLife: 800
                         });
@@ -304,6 +319,7 @@ class Game {
                         type: 'frictionZone',
                         x: aimTarget.x,
                         y: aimTarget.y,
+                        z: aimTarget.z,
                         radius: card.effect.radius,
                         friction: card.effect.friction,
                         duration: card.effect.duration
@@ -327,6 +343,7 @@ class Game {
                         type: 'heat_engine',
                         x: selfPhysics.position.x,
                         y: selfPhysics.position.y,
+                        z: selfPhysics.position.z,
                         life: 500,
                         maxLife: 500
                     });
@@ -334,8 +351,6 @@ class Game {
                 break;
             case 'quantum_superposition':
                 // 进入量子叠加态
-                console.log('=== 使用量子叠加卡牌 ===');
-                console.log('当前 physics.effects:', this.physics.effects.map(e => ({ type: e.type, duration: e.duration })));
                 selfPlayer.quantumState = 'superposition';
                 // 添加特效
                 if (selfPhysics) {
@@ -347,7 +362,6 @@ class Game {
                         maxLife: 1000
                     });
                 }
-                console.log('使用量子叠加后 physics.effects:', this.physics.effects.map(e => ({ type: e.type, duration: e.duration })));
                 break;
         }
         this.cardSystem.discard(card);
@@ -423,21 +437,24 @@ class Game {
     
     // 量子态坍缩
     collapseQuantumState(player) {
-        // 坍缩：随机位置传送
-        const angle = Math.random() * Math.PI * 2;
+        // 坍缩：随机位置传送（3D空间）
+        const theta = Math.random() * Math.PI * 2; // 方位角
+        const phi = Math.random() * Math.PI;       // 极角
         const radius = Math.random() * (GAME_CONFIG.ARENA_RADIUS - 50);
-        const newX = Math.cos(angle) * radius;
-        const newY = Math.sin(angle) * radius;
+        const newX = radius * Math.sin(phi) * Math.cos(theta);
+        const newY = radius * Math.sin(phi) * Math.sin(theta);
+        const newZ = radius * Math.cos(phi);
         const physics = this.physics.getPlayer(player.id);
         if (physics) {
-            Matter.Body.setPosition(physics, { x: newX, y: newY });
-            Matter.Body.setVelocity(physics, { x: 0, y: 0 });
+            this.physics.setPlayerPosition(player.id, newX, newY, newZ);
+            this.physics.setPlayerVelocity(player.id, 0, 0, 0);
             
             // 添加坍缩特效
             this.physics.addTempEffect({
                 type: 'quantum',
                 x: newX,
                 y: newY,
+                z: newZ,
                 life: 800,
                 maxLife: 800
             });
@@ -460,18 +477,21 @@ class Game {
         if (targetPhysics && selfPhysics) {
             const dx = targetPhysics.position.x - selfPhysics.position.x;
             const dy = targetPhysics.position.y - selfPhysics.position.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
+            const dz = targetPhysics.position.z - selfPhysics.position.z;
+            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (dist > 0) {
                 const impulse = 180 * heatEngine.impulseMultiplier; // 3×动量冲击
                 const impulseX = (dx / dist) * impulse;
                 const impulseY = (dy / dist) * impulse;
-                this.physics.applyImpulse(targetId, impulseX, impulseY);
+                const impulseZ = (dz / dist) * impulse;
+                this.physics.applyImpulse(targetId, impulseX, impulseY, impulseZ);
                 
                 // 添加热机爆发特效 - 更壮观的特效！
                 this.physics.addTempEffect({
                     type: 'heat_engine_blast',
                     x: targetPhysics.position.x,
                     y: targetPhysics.position.y,
+                    z: targetPhysics.position.z,
                     life: 1500,
                     maxLife: 1500
                 });
@@ -497,18 +517,21 @@ class Game {
             if (targetPhysics && selfPhysics) {
                 const dx = targetPhysics.position.x - selfPhysics.position.x;
                 const dy = targetPhysics.position.y - selfPhysics.position.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
+                const dz = targetPhysics.position.z - selfPhysics.position.z;
+                const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
                 if (dist > 0) {
                     const impulse = 180 * heatEngine.impulseMultiplier; // 3×动量冲击
                     const impulseX = (dx / dist) * impulse;
                     const impulseY = (dy / dist) * impulse;
-                    this.physics.applyImpulse(targetId, impulseX, impulseY);
+                    const impulseZ = (dz / dist) * impulse;
+                    this.physics.applyImpulse(targetId, impulseX, impulseY, impulseZ);
                     
                     // 添加热机爆发特效 - 更壮观的特效！
                     this.physics.addTempEffect({
                         type: 'heat_engine_blast',
                         x: targetPhysics.position.x,
                         y: targetPhysics.position.y,
+                        z: targetPhysics.position.z,
                         life: 1500,
                         maxLife: 1500
                     });
@@ -529,6 +552,9 @@ class Game {
                 if (effect.type === 'massChange' && player.originalMass) {
                     this.physics.setPlayerMass(player.id, player.originalMass);
                     player.originalMass = null;
+                }
+                if (effect.type === 'anchor') {
+                    player.anchorPosition = null;
                 }
                 return false;
             }
@@ -619,6 +645,21 @@ class Game {
 
     update(deltaTime) {
         if (this.state === GAME_STATES.PLAYING) {
+            // 处理定位锚效果 - 保持玩家位置固定
+            this.players.forEach(player => {
+                if (!player.eliminated && player.effects) {
+                    const anchorEffect = player.effects.find(e => e.type === 'anchor');
+                    if (anchorEffect) {
+                        const physicsPlayer = this.physics.getPlayer(player.id);
+                        if (physicsPlayer && player.anchorPosition) {
+                            // Set position directly (no Matter.js anymore)
+                            this.physics.setPlayerPosition(player.id, player.anchorPosition.x, player.anchorPosition.y, 0);
+                            this.physics.setPlayerVelocity(player.id, 0, 0, 0);
+                        }
+                    }
+                }
+            });
+            
             // 处理电荷之间的库仑力
             if (!this.players[0].eliminated && !this.players[1].eliminated) {
                 const p1Physics = this.physics.getPlayer(1);
@@ -629,17 +670,21 @@ class Game {
                 if (q1 !== 0 && q2 !== 0) {
                     const dx = p2Physics.position.x - p1Physics.position.x;
                     const dy = p2Physics.position.y - p1Physics.position.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const dz = p2Physics.position.z - p1Physics.position.z;
+                    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
                     
                     if (dist > 20) {
                         const k = 5000;
                         const impulseMagnitude = k * q1 * q2 / (dist * dist) * 15; // 减小系数以适应累加电荷
-                        const angle = Math.atan2(dy, dx);
                         
                         console.log(`库仑力生效: q1=${q1}, q2=${q2}, dist=${dist.toFixed(2)}, impulse=${impulseMagnitude.toFixed(4)}`);
                         
-                        this.physics.applyImpulse(1, -Math.cos(angle) * impulseMagnitude, -Math.sin(angle) * impulseMagnitude);
-                        this.physics.applyImpulse(2, Math.cos(angle) * impulseMagnitude, Math.sin(angle) * impulseMagnitude);
+                        const impulseX = (dx / dist) * impulseMagnitude;
+                        const impulseY = (dy / dist) * impulseMagnitude;
+                        const impulseZ = (dz / dist) * impulseMagnitude;
+                        
+                        this.physics.applyImpulse(1, -impulseX, -impulseY, -impulseZ);
+                        this.physics.applyImpulse(2, impulseX, impulseY, impulseZ);
                     }
                 }
             }
@@ -672,8 +717,8 @@ class Game {
     getState() {
         const physicsPlayers = this.physics.getAllPlayers().map(p => ({
             playerId: p.playerId,
-            position: { x: p.position.x, y: p.position.y },
-            velocity: { x: p.velocity.x, y: p.velocity.y },
+            position: { x: p.position.x, y: p.position.y, z: p.position.z },
+            velocity: { x: p.velocity.x, y: p.velocity.y, z: p.velocity.z },
             mass: p.mass
         }));
         
@@ -696,8 +741,8 @@ class Game {
 
     restart() {
         this.physics.reset();
-        this.physics.createPlayer(-160, 0, 1);
-        this.physics.createPlayer(160, 0, 2);
+        this.physics.createPlayer(-160, 0, 0, 1);
+        this.physics.createPlayer(160, 0, 0, 2);
         this.players = [
             { id: 1, energy: GAME_CONFIG.STARTING_ENERGY, cards: [], eliminated: false, shieldActive: false, effects: [], charge: 0, chargeDuration: 0, quantumState: null, heatEngine: null },
             { id: 2, energy: GAME_CONFIG.STARTING_ENERGY, cards: [], eliminated: false, shieldActive: false, effects: [], charge: 0, chargeDuration: 0, quantumState: null, heatEngine: null }

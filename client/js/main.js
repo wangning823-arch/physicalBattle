@@ -1,3 +1,4 @@
+
 const GameUI = {
     game: null,
     lastTime: 0,
@@ -27,10 +28,8 @@ const GameUI = {
         this.gameLoop();
         console.log('Game loop started');
     },
-
     setupEventListeners() {
         document.getElementById('end-turn-btn').addEventListener('click', () => {
-            console.log('End turn button clicked');
             if (this.game.aimingState.active) {
                 this.game.cancelAim();
                 this.updateUI();
@@ -47,14 +46,12 @@ const GameUI = {
         });
 
         document.getElementById('cards-hand').addEventListener('click', (e) => {
-            console.log('Cards area clicked');
             if (this.game.aimingState.active) return;
             if (this.game.turnPhase !== 'play') return; // 只能在出牌阶段出牌
             const card = e.target.closest('.card');
             if (card && !card.classList.contains('disabled')) {
                 const index = parseInt(card.dataset.index);
                 const currentPlayer = this.game.players[this.game.currentPlayerIndex];
-                console.log('Playing card index:', index, 'for player:', currentPlayer);
                 const result = this.game.playCard(currentPlayer.id, index);
                 if (result === 'aiming') {
                     this.updateUI();
@@ -64,32 +61,47 @@ const GameUI = {
             }
         });
 
-        const canvas = document.getElementById('game-canvas');
-        canvas.addEventListener('click', (e) => {
+        // Helper function to handle aiming click from either 2D canvas or 3D layer
+        const handleAimClick = (e, element) => {
             if (this.game.aimingState.active) {
-                const rect = canvas.getBoundingClientRect();
+                const rect = element.getBoundingClientRect();
+                // Calculate scale based on 800x600 game world size
                 const scaleX = 800 / rect.width;
                 const scaleY = 600 / rect.height;
                 const x = (e.clientX - rect.left) * scaleX - 400;
                 const y = (e.clientY - rect.top) * scaleY - 300;
-                this.game.confirmAim(x, y);
+                this.game.confirmAim(x, y, 0);
                 this.updateUI();
             }
-        });
+        };
 
-        canvas.addEventListener('mousemove', (e) => {
+        // Helper function to handle aiming mousemove
+        const handleAimMove = (e, element) => {
             if (this.game.aimingState.active) {
-                const rect = canvas.getBoundingClientRect();
+                const rect = element.getBoundingClientRect();
                 const scaleX = 800 / rect.width;
                 const scaleY = 600 / rect.height;
                 this.aimingTarget = {
                     x: (e.clientX - rect.left) * scaleX - 400,
-                    y: (e.clientY - rect.top) * scaleY - 300
+                    y: (e.clientY - rect.top) * scaleY - 300,
+                    z: 0
                 };
             } else {
                 this.aimingTarget = null;
             }
-        });
+        };
+
+        // Add event listeners to 2D canvas
+        const canvas = document.getElementById('game-canvas');
+        canvas.addEventListener('click', (e) => handleAimClick(e, canvas));
+        canvas.addEventListener('mousemove', (e) => handleAimMove(e, canvas));
+
+        // Add event listeners to 3D interaction layer
+        const interactionLayer = document.getElementById('arena-interaction-layer');
+        if (interactionLayer) {
+            interactionLayer.addEventListener('click', (e) => handleAimClick(e, interactionLayer));
+            interactionLayer.addEventListener('mousemove', (e) => handleAimMove(e, interactionLayer));
+        }
         
         document.getElementById('cards-hand').addEventListener('mouseover', (e) => {
             const cardEl = e.target.closest('.card');
@@ -138,7 +150,6 @@ const GameUI = {
     },
 
     updateUI() {
-        console.log('========== updateUI() 开始 ==========');
         this.updateEnergyBars();
         this.updateHand();
         this.updateTurnIndicator();
@@ -151,10 +162,6 @@ const GameUI = {
         } else {
             endTurnBtn.textContent = '完成出牌';
         }
-        
-
-        
-        console.log('========== updateUI() 完成 ==========');
     },
     
     updatePhysicsParamsPanel() {
@@ -261,7 +268,6 @@ const GameUI = {
                     chargeBtn.dataset.playerId = player.id;
                     chargeBtn.addEventListener('click', (e) => {
                         const pid = parseInt(e.target.dataset.playerId);
-                        console.log('充能按钮被点击，玩家ID:', pid);
                         self.chargeHeatEngine(pid);
                     });
                     chargeBtn.addEventListener('mouseover', (e) => {
@@ -284,7 +290,6 @@ const GameUI = {
                     fireBtn.dataset.playerId = player.id;
                     fireBtn.addEventListener('click', (e) => {
                         const pid = parseInt(e.target.dataset.playerId);
-                        console.log('发射按钮被点击，玩家ID:', pid);
                         self.fireHeatEngine(pid);
                     });
                     fireBtn.addEventListener('mouseover', (e) => {
@@ -435,8 +440,6 @@ const GameUI = {
     },
 
     endTurn() {
-        console.log('Ending turn...');
-        
         if (this.game.turnPhase === 'discard') {
             // 已经在弃牌阶段的话，直接处理
             this.handleCurrentPhase();
@@ -482,26 +485,18 @@ const GameUI = {
     },
 
     updateHand() {
-        console.log('Updating hand display...');
         const container = document.getElementById('cards-hand');
         if (!container) {
-            console.error('cards-hand element not found!');
             return;
         }
         
         container.innerHTML = '';
-        console.log('Cleared container');
 
         const currentPlayer = this.game.players[this.game.currentPlayerIndex];
-        console.log('Current player index:', this.game.currentPlayerIndex);
-        console.log('Current player:', currentPlayer);
         
         if (!currentPlayer || currentPlayer.eliminated) {
-            console.log('Player eliminated or not found');
             return;
         }
-
-        console.log('Number of cards:', currentPlayer.cards.length);
         
         if (currentPlayer.cards.length === 0) {
             container.innerHTML = '<div style="color: white; padding: 10px;">没有手牌</div>';
@@ -509,7 +504,6 @@ const GameUI = {
         }
 
         currentPlayer.cards.forEach((card, index) => {
-            console.log('Rendering card', index, card.name);
             const cardEl = document.createElement('div');
             cardEl.className = 'card';
             cardEl.dataset.index = index;
@@ -523,8 +517,6 @@ const GameUI = {
             `;
             container.appendChild(cardEl);
         });
-        
-        console.log('Cards rendered:', container.children.length);
     },
 
     updateTurnIndicator() {
@@ -631,6 +623,5 @@ const GameUI = {
 };
 
 window.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM loaded, initializing game...');
     GameUI.init();
 });
