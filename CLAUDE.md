@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with this repository.
 
 ## Project Overview
 
-**物理竞技场 (Physics Arena)** - A 2-player physics-based battle game where players use physics-themed cards to push each other out of a circular arena. Built with HTML5 Canvas and Matter.js.
+**物理竞技场 (Physics Arena)** - A 2-player physics-based battle game where players use physics-themed cards to push each other out of a circular arena. Built with Three.js for 3D rendering and a custom 3D physics engine.
 
 ## Quick Start
 
@@ -22,15 +22,24 @@ cd client && ./start-server.sh
 - `play` phase: Player can play cards using energy
 - Turn order: Player 1 discard → Player 1 play → Player 2 discard → Player 2 play → New round
 
+### 3D Architecture
+The game uses a 3D stack:
+- **Renderer**: Three.js WebGL rendering (see `renderer.js`)
+- **Physics Engine**: Custom 3D physics with:
+  - Player position/velocity updates
+  - Collision detection and response
+  - Constraints (rigid and soft rope)
+  - Effect zones (gravity, friction, damping)
+
 ### Core Files
 
 | File | Purpose |
 |------|---------|
 | `client/js/constants.js` | Game config (canvas size, energy, gravity, etc.) |
-| `client/js/physics.js` | Physics engine wrapper using Matter.js |
+| `client/js/physics.js` | Custom 3D physics engine |
 | `client/js/cardSystem.js` | Card definitions, deck management |
 | `client/js/game.js` | Main game logic, turn management, card execution |
-| `client/js/renderer.js` | Canvas rendering for arena, players, effects |
+| `client/js/renderer.js` | Three.js 3D rendering |
 | `client/js/main.js` | Game UI initialization, event handlers |
 | `client/server.js` | Simple static HTTP server (port 8888) |
 
@@ -80,12 +89,13 @@ physicalBattle/
 │   ├── css/style.css       # Styles
 │   ├── js/
 │   │   ├── constants.js    # Game configuration
-│   │   ├── physics.js      # Physics engine wrapper
+│   │   ├── physics.js      # Custom 3D physics engine
 │   │   ├── cardSystem.js   # Card definitions and deck
-│   │   ├── renderer.js     # Canvas rendering
+│   │   ├── renderer.js     # Three.js 3D rendering
 │   │   ├── game.js         # Game logic and state
 │   │   └── main.js         # UI initialization and events
 │   ├── server.js           # Static file server
 │   └── start-server.sh     # Server startup script
-└── PHYSICS_ARENA_PLAN.md   # Original design document
+├── PHYSICS_ARENA_PLAN.md   # Original 2D design document
+└── 3D_TECHNOLOGY_SELECTION.md  # 3D architecture planning document
 ```

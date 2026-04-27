@@ -607,7 +607,7 @@ const GameUI = {
         const currentPlayerPhysics = state.physicsPlayers.find(p => 
             p.playerId === this.game.players[this.game.currentPlayerIndex].id
         );
-        this.game.render(state, this.aimingTarget, currentPlayerPhysics);
+        this.game.render(state, this.aimingTarget, currentPlayerPhysics, deltaTime || 16.67);
         
         this.updatePhysicsParamsPanel();
 

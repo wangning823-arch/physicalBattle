@@ -107,20 +107,32 @@ class Game {
         this.aimingState = { active: false, card: null, cardIndex: -1, playerId: 0 };
     }
 
+    triggerPlayerAttack(playerId) {
+        if (this.renderer && this.renderer.triggerAttackAnimation) {
+            this.renderer.triggerAttackAnimation(playerId);
+        }
+    }
+
+    triggerPlayerHit(playerId, direction) {
+        if (this.renderer && this.renderer.triggerHitAnimation) {
+            this.renderer.triggerHitAnimation(playerId, direction);
+        }
+    }
+
     executeCard(card, playerId, aimTarget) {
         const selfPlayer = this.players.find(p => p.id === playerId);
         const selfPhysics = this.physics.getPlayer(playerId);
         const targetId = playerId === 1 ? 2 : 1;
         const targetPhysics = this.physics.getPlayer(targetId);
         const targetPlayer = this.players.find(p => p.id === targetId);
-        
+
         // 热机充能功能：使用卡牌时（非热机本身）自动充能
         if (card.id !== 'heat_engine' && selfPlayer.heatEngine && selfPlayer.heatEngine.active) {
             selfPlayer.heatEngine.charge = Math.min(selfPlayer.heatEngine.maxCharge, selfPlayer.heatEngine.charge + 1);
         }
-        
+
         // 如果目标处于量子叠加态，卡牌无效
-        if (targetPlayer && targetPlayer.quantumState !== null && 
+        if (targetPlayer && targetPlayer.quantumState !== null &&
             (card.effect.targetEnemy || ['momentum_blast', 'explosive_charge', 'charge_attach', 'charge_attach_negative'].includes(card.id))) {
             return; // 卡牌对量子态目标无效
         }
@@ -137,7 +149,12 @@ class Game {
                         const impulseY = (dy / dist) * card.effect.impulse;
                         const impulseZ = (dz / dist) * card.effect.impulse;
                         this.physics.applyImpulse(targetId, impulseX, impulseY, impulseZ);
-                        
+
+                        // 触发攻击动画和受击动画
+                        this.triggerPlayerAttack(playerId);
+                        const hitDir = { x: dx/dist, y: dy/dist, z: dz/dist };
+                        this.triggerPlayerHit(targetId, hitDir);
+
                         // 添加动量冲击激光特效
                         this.physics.addTempEffect({
                             type: 'laser',
@@ -148,7 +165,8 @@ class Game {
                             endY: targetPhysics.position.y,
                             endZ: targetPhysics.position.z,
                             life: 500,
-                            maxLife: 500
+                            maxLife: 500,
+                            _id: Date.now()
                         });
                     }
                 }
@@ -234,15 +252,21 @@ class Game {
                         const impulseY = (dy / dist) * card.effect.impulse;
                         const impulseZ = (dz / dist) * card.effect.impulse;
                         this.physics.applyImpulse(targetId, impulseX, impulseY, impulseZ);
-                        
+
+                        // 触发攻击动画和受击动画
+                        this.triggerPlayerAttack(playerId);
+                        const hitDir = { x: dx/dist, y: dy/dist, z: dz/dist };
+                        this.triggerPlayerHit(targetId, hitDir);
+
                         // 添加爆裂冲击特效（更大更持久）
                         this.physics.addTempEffect({
-                            type: 'momentum_blast',
+                            type: 'explosive_charge',
                             x: targetPhysics.position.x,
                             y: targetPhysics.position.y,
                             z: targetPhysics.position.z,
                             life: 700,
-                            maxLife: 700
+                            maxLife: 700,
+                            _id: Date.now()
                         });
                     }
                 }
@@ -309,7 +333,8 @@ class Game {
                             y: targetPhysics.position.y,
                             z: targetPhysics.position.z,
                             life: 800,
-                            maxLife: 800
+                            maxLife: 800,
+                            _id: Date.now()
                         });
                     }
                 }
@@ -345,7 +370,8 @@ class Game {
                         y: selfPhysics.position.y,
                         z: selfPhysics.position.z,
                         life: 500,
-                        maxLife: 500
+                        maxLife: 500,
+                        _id: Date.now()
                     });
                 }
                 break;
@@ -358,8 +384,10 @@ class Game {
                         type: 'quantum',
                         x: selfPhysics.position.x,
                         y: selfPhysics.position.y,
+                        z: selfPhysics.position.z,
                         life: 1000,
-                        maxLife: 1000
+                        maxLife: 1000,
+                        _id: Date.now()
                     });
                 }
                 break;
@@ -456,7 +484,8 @@ class Game {
                 y: newY,
                 z: newZ,
                 life: 800,
-                maxLife: 800
+                maxLife: 800,
+                _id: Date.now()
             });
         }
         player.quantumState = null; // 恢复正常
@@ -533,7 +562,8 @@ class Game {
                         y: targetPhysics.position.y,
                         z: targetPhysics.position.z,
                         life: 1500,
-                        maxLife: 1500
+                        maxLife: 1500,
+                        _id: Date.now()
                     });
                 }
             }
@@ -694,7 +724,7 @@ class Game {
         }
     }
 
-    render(gameState = null, aimingTarget = null, currentPlayerPhysics = null) {
+    render(gameState = null, aimingTarget = null, currentPlayerPhysics = null, deltaTime = 16) {
         // 总是创建完整的 gameState，确保不会出错
         const completeGameState = {
             arenaRadius: this.physics.arenaRadius,
@@ -711,7 +741,7 @@ class Game {
                 2: this.players[1]?.quantumState !== null
             }
         };
-        this.renderer.render(completeGameState, aimingTarget, currentPlayerPhysics);
+        this.renderer.render(completeGameState, aimingTarget, currentPlayerPhysics, deltaTime);
     }
 
     getState() {
