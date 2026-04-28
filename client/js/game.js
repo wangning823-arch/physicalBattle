@@ -8,8 +8,8 @@ class Game {
         this.currentTurn = 1;
         this.currentPlayerIndex = 0;
         this.players = [
-            { id: 1, energy: GAME_CONFIG.STARTING_ENERGY, cards: [], eliminated: false, effects: [], quantumState: null, heatEngine: null },
-            { id: 2, energy: GAME_CONFIG.STARTING_ENERGY, cards: [], eliminated: false, effects: [], quantumState: null, heatEngine: null }
+            { id: 1, energy: GAME_CONFIG.STARTING_ENERGY, cards: [], eliminated: false, effects: [], quantumState: null, heatEngine: null, turnsPlayed: 0 },
+            { id: 2, energy: GAME_CONFIG.STARTING_ENERGY, cards: [], eliminated: false, effects: [], quantumState: null, heatEngine: null, turnsPlayed: 0 }
         ];
         this.selectedCard = null;
         this.aimingState = { active: false, card: null, cardIndex: -1, playerId: 0 };
@@ -130,24 +130,52 @@ class Game {
         switch (card.id) {
             case 'momentum_blast':
                 if (targetPhysics && aimTarget && selfPhysics) {
-                    const dx = aimTarget.x - selfPhysics.position.x;
-                    const dy = aimTarget.y - selfPhysics.position.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist > 0) {
-                        const impulseX = (dx / dist) * card.effect.impulse;
-                        const impulseY = (dy / dist) * card.effect.impulse;
-                        this.physics.applyImpulse(targetId, impulseX, impulseY);
-                        
-                        // 添加动量冲击激光特效
-                        this.physics.addTempEffect({
-                            type: 'laser',
-                            startX: selfPhysics.position.x,
-                            startY: selfPhysics.position.y,
-                            endX: targetPhysics.position.x,
-                            endY: targetPhysics.position.y,
-                            life: 500,
-                            maxLife: 500
-                        });
+                    const targetPlayer = this.players.find(p => p.id === targetId);
+                    const hasAnchor = targetPlayer && targetPlayer.effects.some(e => e.type === 'anchor');
+
+                    if (!hasAnchor) {
+                        // 计算激光路径（从自身到瞄准点的线段）到对手的最近距离
+                        const lx = aimTarget.x - selfPhysics.position.x;
+                        const ly = aimTarget.y - selfPhysics.position.y;
+                        const lLenSq = lx * lx + ly * ly;
+                        let t = 0;
+                        if (lLenSq > 0) {
+                            t = Math.max(0, Math.min(1,
+                                ((targetPhysics.position.x - selfPhysics.position.x) * lx +
+                                 (targetPhysics.position.y - selfPhysics.position.y) * ly) / lLenSq
+                            ));
+                        }
+                        const closestX = selfPhysics.position.x + t * lx;
+                        const closestY = selfPhysics.position.y + t * ly;
+                        const hitDist = Math.sqrt(
+                            (targetPhysics.position.x - closestX) ** 2 +
+                            (targetPhysics.position.y - closestY) ** 2
+                        );
+                        const HIT_RADIUS = 30; // 玩家碰撞半径
+
+                        if (hitDist <= HIT_RADIUS) {
+                            // 激光击中对手，施加冲量（方向：从自身指向对手）
+                            const dx = targetPhysics.position.x - selfPhysics.position.x;
+                            const dy = targetPhysics.position.y - selfPhysics.position.y;
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            if (dist > 0) {
+                                const impulseX = (dx / dist) * card.effect.impulse;
+                                const impulseY = (dy / dist) * card.effect.impulse;
+                                this.physics.applyImpulse(targetId, impulseX, impulseY);
+                            }
+
+                            // 激光特效：从自身到击中点
+                            this.physics.addTempEffect({
+                                type: 'laser',
+                                startX: selfPhysics.position.x,
+                                startY: selfPhysics.position.y,
+                                endX: closestX,
+                                endY: closestY,
+                                life: 500,
+                                maxLife: 500
+                            });
+                        }
+                        // 未击中则不出效果
                     }
                 }
                 break;
@@ -212,39 +240,84 @@ class Game {
                         type: 'massChange',
                         multiplier: card.effect.multiplier,
                         remainingTurns: card.effect.duration,
-                        originalMass: originalMass
+                        originalMass: originalMass,
+                        startTurn: selfPlayer.turnsPlayed
                     });
                 }
                 break;
             case 'explosive_charge':
-                if (targetPhysics && aimTarget) {
-                    const dx = aimTarget.x - selfPhysics.position.x;
-                    const dy = aimTarget.y - selfPhysics.position.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist > 0) {
-                        const impulseX = (dx / dist) * card.effect.impulse;
-                        const impulseY = (dy / dist) * card.effect.impulse;
-                        this.physics.applyImpulse(targetId, impulseX, impulseY);
-                        
-                        // 添加爆裂冲击特效（更大更持久）
-                        this.physics.addTempEffect({
-                            type: 'momentum_blast',
-                            x: targetPhysics.position.x,
-                            y: targetPhysics.position.y,
-                            life: 700,
-                            maxLife: 700
-                        });
+                if (targetPhysics && aimTarget && selfPhysics) {
+                    const targetPlayer = this.players.find(p => p.id === targetId);
+                    const hasAnchor = targetPlayer && targetPlayer.effects.some(e => e.type === 'anchor');
+
+                    if (!hasAnchor) {
+                        // 计算激光路径到对手的最近距离
+                        const lx = aimTarget.x - selfPhysics.position.x;
+                        const ly = aimTarget.y - selfPhysics.position.y;
+                        const lLenSq = lx * lx + ly * ly;
+                        let t = 0;
+                        if (lLenSq > 0) {
+                            t = Math.max(0, Math.min(1,
+                                ((targetPhysics.position.x - selfPhysics.position.x) * lx +
+                                 (targetPhysics.position.y - selfPhysics.position.y) * ly) / lLenSq
+                            ));
+                        }
+                        const closestX = selfPhysics.position.x + t * lx;
+                        const closestY = selfPhysics.position.y + t * ly;
+                        const hitDist = Math.sqrt(
+                            (targetPhysics.position.x - closestX) ** 2 +
+                            (targetPhysics.position.y - closestY) ** 2
+                        );
+                        const HIT_RADIUS = 30;
+
+                        if (hitDist <= HIT_RADIUS) {
+                            const dx = targetPhysics.position.x - selfPhysics.position.x;
+                            const dy = targetPhysics.position.y - selfPhysics.position.y;
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            if (dist > 0) {
+                                const impulseX = (dx / dist) * card.effect.impulse;
+                                const impulseY = (dy / dist) * card.effect.impulse;
+                                this.physics.applyImpulse(targetId, impulseX, impulseY);
+                            }
+
+                            // 爆裂冲击特效在击中点
+                            this.physics.addTempEffect({
+                                type: 'momentum_blast',
+                                x: closestX,
+                                y: closestY,
+                                life: 700,
+                                maxLife: 700
+                            });
+                        }
                     }
                 }
                 break;
             case 'anchor':
                 if (selfPlayer) {
+                    // 保存使用定位锚时的位置
+                    if (selfPhysics) {
+                        selfPlayer.anchorPosition = {
+                            x: selfPhysics.position.x,
+                            y: selfPhysics.position.y
+                        };
+                        // 同时在物理体上也保存一份
+                        selfPhysics._anchorPos = {
+                            x: selfPhysics.position.x,
+                            y: selfPhysics.position.y
+                        };
+                        // 设为静态体：完全不动，不受任何力、冲量或碰撞影响
+                        Matter.Body.setStatic(selfPhysics, true);
+                        Matter.Body.setVelocity(selfPhysics, { x: 0, y: 0 });
+                    }
                     selfPlayer.effects.push({
                         type: 'anchor',
-                        remainingTurns: card.effect.duration
+                        remainingTurns: card.effect.duration,
+                        startTurn: selfPlayer.turnsPlayed
                     });
-                    if (selfPhysics) {
-                        Matter.Body.setVelocity(selfPhysics, { x: 0, y: 0 });
+                    console.log(`[Anchor] 玩家${playerId}使用定位锚, startTurn=${selfPlayer.turnsPlayed}, duration=${card.effect.duration}, effects=`, selfPlayer.effects);
+                    // 立即告诉物理引擎这个玩家有定位锚了
+                    if (this.physics.anchoredPlayerIds.indexOf(playerId) === -1) {
+                        this.physics.anchoredPlayerIds.push(playerId);
                     }
                 }
                 break;
@@ -357,27 +430,38 @@ class Game {
     // 核心流程：玩家一弃→玩家一出→玩家二弃→玩家二出
     advanceGamePhase() {
         if (this.turnPhase === 'discard') {
+            // ===== 弃牌阶段开始 = 玩家回合开始 =====
+            // 在这里处理该玩家的效果过期（从上一次出牌到这次出牌之间）
+            const currentPlayer = this.players[this.currentPlayerIndex];
+            currentPlayer.turnsPlayed++;
+            this.processPlayerEffects(currentPlayer);
+            if (currentPlayer.chargeDuration > 0) {
+                currentPlayer.chargeDuration--;
+                if (currentPlayer.chargeDuration <= 0) {
+                    currentPlayer.charge = 0;
+                }
+            }
+
             // 弃牌阶段结束，进入该玩家的出牌阶段
             this.turnPhase = 'play';
         } else {
-            // 出牌阶段结束，先检查是否是热机拥有者的回合结束
+            // 出牌阶段结束
             const currentPlayer = this.players[this.currentPlayerIndex];
+
+            // 热机拥有者的回合结束处理
             if (currentPlayer.heatEngine && currentPlayer.heatEngine.active) {
-                // 热机拥有者的回合结束了，减少剩余回合数
                 currentPlayer.heatEngine.ownerTurnsRemaining--;
                 currentPlayer.heatEngine.duration = currentPlayer.heatEngine.ownerTurnsRemaining;
-                
                 if (currentPlayer.heatEngine.ownerTurnsRemaining <= 0) {
-                    // 热机持续时间结束，结算
                     this.settleHeatEngine(currentPlayer);
                 }
             }
-            
+
             if (this.currentPlayerIndex === 0) {
                 // 玩家一出牌结束，轮到玩家二
                 this.currentPlayerIndex = 1;
                 this.turnPhase = 'discard';
-                
+
                 // 检查玩家2是否需要在对手回合结束时坍缩
                 const player2 = this.players[1];
                 if (player2 && !player2.eliminated && player2.quantumState === 'superposition') {
@@ -389,16 +473,15 @@ class Game {
                 this.currentTurn++;
                 this.isNewRound = true;
                 this.turnPhase = 'discard';
-                
+
                 // 检查玩家1是否需要在对手回合结束时坍缩
                 const player1 = this.players[0];
                 if (player1 && !player1.eliminated && player1.quantumState === 'superposition') {
                     this.collapseQuantumState(player1);
                 }
-                
-                // 新回合更新效果
+
+                // 新回合：所有玩家补充能量
                 this.physics.updateEffectsTurn();
-                
                 for (let i = 0; i < this.players.length; i++) {
                     const player = this.players[i];
                     if (!player.eliminated) {
@@ -406,15 +489,6 @@ class Game {
                             GAME_CONFIG.MAX_ENERGY,
                             player.energy + GAME_CONFIG.ENERGY_PER_TURN
                         );
-                    }
-                    this.processPlayerEffects(player);
-                    
-                    // 更新电荷持续时间
-                    if (player.chargeDuration > 0) {
-                        player.chargeDuration--;
-                        if (player.chargeDuration <= 0) {
-                            player.charge = 0; // 电荷消失
-                        }
                     }
                 }
             }
@@ -450,14 +524,18 @@ class Game {
         const player = this.players.find(p => p.id === playerId);
         if (!player || !player.heatEngine || !player.heatEngine.active) return false;
         if (player.heatEngine.charge < player.heatEngine.maxCharge) return false;
-        
+
         const heatEngine = player.heatEngine;
         const selfPhysics = this.physics.getPlayer(player.id);
         const targetId = player.id === 1 ? 2 : 1;
         const targetPhysics = this.physics.getPlayer(targetId);
-        
-        // 释放3倍动量冲击
-        if (targetPhysics && selfPhysics) {
+
+        // 检查目标是否有定位锚效果
+        const targetPlayer = this.players.find(p => p.id === targetId);
+        const hasAnchor = targetPlayer && targetPlayer.effects.some(e => e.type === 'anchor');
+
+        // 释放3倍动量冲击（只对无定位锚的目标）
+        if (targetPhysics && selfPhysics && !hasAnchor) {
             const dx = targetPhysics.position.x - selfPhysics.position.x;
             const dy = targetPhysics.position.y - selfPhysics.position.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
@@ -466,7 +544,7 @@ class Game {
                 const impulseX = (dx / dist) * impulse;
                 const impulseY = (dy / dist) * impulse;
                 this.physics.applyImpulse(targetId, impulseX, impulseY);
-                
+
                 // 添加热机爆发特效 - 更壮观的特效！
                 this.physics.addTempEffect({
                     type: 'heat_engine_blast',
@@ -477,7 +555,7 @@ class Game {
                 });
             }
         }
-        
+
         // 发射后移除热机
         player.heatEngine = null;
         return true;
@@ -487,14 +565,18 @@ class Game {
     settleHeatEngine(player) {
         const heatEngine = player.heatEngine;
         if (!heatEngine) return;
-        
+
         const selfPhysics = this.physics.getPlayer(player.id);
         const targetId = player.id === 1 ? 2 : 1;
         const targetPhysics = this.physics.getPlayer(targetId);
-        
+
+        // 检查目标是否有定位锚效果
+        const targetPlayer = this.players.find(p => p.id === targetId);
+        const hasAnchor = targetPlayer && targetPlayer.effects.some(e => e.type === 'anchor');
+
         if (heatEngine.charge >= heatEngine.maxCharge) {
-            // 充满能量，释放3倍动量冲击
-            if (targetPhysics && selfPhysics) {
+            // 充满能量，释放3倍动量冲击（只对无定位锚的目标）
+            if (targetPhysics && selfPhysics && !hasAnchor) {
                 const dx = targetPhysics.position.x - selfPhysics.position.x;
                 const dy = targetPhysics.position.y - selfPhysics.position.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
@@ -503,7 +585,7 @@ class Game {
                     const impulseX = (dx / dist) * impulse;
                     const impulseY = (dy / dist) * impulse;
                     this.physics.applyImpulse(targetId, impulseX, impulseY);
-                    
+
                     // 添加热机爆发特效 - 更壮观的特效！
                     this.physics.addTempEffect({
                         type: 'heat_engine_blast',
@@ -515,20 +597,32 @@ class Game {
                 }
             }
         }
-        
+
         // 无论是否充满，热机都消失
         player.heatEngine = null;
     }
 
     processPlayerEffects(player) {
         if (!player.effects || player.effects.length === 0) return;
-        
+
+        // 效果过期规则：从使用的那一刻起，持续 N 个该玩家自己的回合
+        // 例如 duration=1：在该玩家第 turnsPlayed=k 时使用，到第 turnsPlayed=k+1 时过期
         player.effects = player.effects.filter(effect => {
-            effect.remainingTurns--;
-            if (effect.remainingTurns <= 0) {
+            const elapsed = player.turnsPlayed - effect.startTurn;
+            if (elapsed >= effect.remainingTurns) {
+                // 效果过期，执行清理
                 if (effect.type === 'massChange' && player.originalMass) {
                     this.physics.setPlayerMass(player.id, player.originalMass);
                     player.originalMass = null;
+                }
+                if (effect.type === 'anchor') {
+                    player.anchorPosition = null;
+                    const physics = this.physics.getPlayer(player.id);
+                    if (physics) {
+                        physics._anchorPos = null;
+                        Matter.Body.setStatic(physics, false);
+                        physics.collisionFilter.mask = 0x0001;
+                    }
                 }
                 return false;
             }
@@ -619,32 +713,82 @@ class Game {
 
     update(deltaTime) {
         if (this.state === GAME_STATES.PLAYING) {
-            // 处理电荷之间的库仑力
+            // 检查哪些玩家有定位锚效果
+            const hasAnchor = [
+                this.players[0].effects.some(e => e.type === 'anchor'),
+                this.players[1].effects.some(e => e.type === 'anchor')
+            ];
+
+            // ========== 关键：物理更新前先把有定位锚的玩家完全锁住 ==========
+            for (let i = 0; i < this.players.length; i++) {
+                if (hasAnchor[i] && this.players[i].anchorPosition) {
+                    const playerPhysics = this.physics.getPlayer(i + 1);
+                    if (playerPhysics) {
+                        Matter.Body.setPosition(playerPhysics, {
+                            x: this.players[i].anchorPosition.x,
+                            y: this.players[i].anchorPosition.y
+                        });
+                        Matter.Body.setVelocity(playerPhysics, { x: 0, y: 0 });
+                        Matter.Body.setAngularVelocity(playerPhysics, 0);
+                    }
+                }
+            }
+
+            // ========== 告诉物理引擎哪些玩家有定位锚 ==========
+            this.physics.anchoredPlayerIds = [];
+            for (let i = 0; i < this.players.length; i++) {
+                if (hasAnchor[i]) {
+                    this.physics.anchoredPlayerIds.push(i + 1);
+                }
+            }
+
+            // ========== 处理电荷之间的库仑力（只对无定位锚的玩家） ==========
             if (!this.players[0].eliminated && !this.players[1].eliminated) {
                 const p1Physics = this.physics.getPlayer(1);
                 const p2Physics = this.physics.getPlayer(2);
                 const q1 = this.players[0].charge;
                 const q2 = this.players[1].charge;
-                
+
                 if (q1 !== 0 && q2 !== 0) {
                     const dx = p2Physics.position.x - p1Physics.position.x;
                     const dy = p2Physics.position.y - p1Physics.position.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
-                    
+
                     if (dist > 20) {
                         const k = 5000;
-                        const impulseMagnitude = k * q1 * q2 / (dist * dist) * 15; // 减小系数以适应累加电荷
+                        const impulseMagnitude = k * q1 * q2 / (dist * dist) * 15;
                         const angle = Math.atan2(dy, dx);
-                        
+
                         console.log(`库仑力生效: q1=${q1}, q2=${q2}, dist=${dist.toFixed(2)}, impulse=${impulseMagnitude.toFixed(4)}`);
-                        
-                        this.physics.applyImpulse(1, -Math.cos(angle) * impulseMagnitude, -Math.sin(angle) * impulseMagnitude);
-                        this.physics.applyImpulse(2, Math.cos(angle) * impulseMagnitude, Math.sin(angle) * impulseMagnitude);
+
+                        // 只对没有定位锚的玩家施加冲量
+                        if (!hasAnchor[0]) {
+                            this.physics.applyImpulse(1, -Math.cos(angle) * impulseMagnitude, -Math.sin(angle) * impulseMagnitude);
+                        }
+                        if (!hasAnchor[1]) {
+                            this.physics.applyImpulse(2, Math.cos(angle) * impulseMagnitude, Math.sin(angle) * impulseMagnitude);
+                        }
                     }
                 }
             }
-            
+
             this.physics.update(deltaTime);
+
+            // ========== 物理更新后再次强制把有定位锚的玩家按回去 ==========
+            for (let i = 0; i < this.players.length; i++) {
+                if (hasAnchor[i] && this.players[i].anchorPosition) {
+                    const playerPhysics = this.physics.getPlayer(i + 1);
+                    if (playerPhysics) {
+                        Matter.Body.setPosition(playerPhysics, {
+                            x: this.players[i].anchorPosition.x,
+                            y: this.players[i].anchorPosition.y
+                        });
+                        Matter.Body.setVelocity(playerPhysics, { x: 0, y: 0 });
+                        Matter.Body.setAngularVelocity(playerPhysics, 0);
+                    }
+                }
+            }
+
             this.checkGameOver();
         }
     }
@@ -699,8 +843,8 @@ class Game {
         this.physics.createPlayer(-160, 0, 1);
         this.physics.createPlayer(160, 0, 2);
         this.players = [
-            { id: 1, energy: GAME_CONFIG.STARTING_ENERGY, cards: [], eliminated: false, shieldActive: false, effects: [], charge: 0, chargeDuration: 0, quantumState: null, heatEngine: null },
-            { id: 2, energy: GAME_CONFIG.STARTING_ENERGY, cards: [], eliminated: false, shieldActive: false, effects: [], charge: 0, chargeDuration: 0, quantumState: null, heatEngine: null }
+            { id: 1, energy: GAME_CONFIG.STARTING_ENERGY, cards: [], eliminated: false, shieldActive: false, effects: [], charge: 0, chargeDuration: 0, quantumState: null, heatEngine: null, turnsPlayed: 0 },
+            { id: 2, energy: GAME_CONFIG.STARTING_ENERGY, cards: [], eliminated: false, shieldActive: false, effects: [], charge: 0, chargeDuration: 0, quantumState: null, heatEngine: null, turnsPlayed: 0 }
         ];
         this.currentTurn = 1;
         this.currentPlayerIndex = 0;

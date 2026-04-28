@@ -107,10 +107,53 @@ class Renderer {
             ctx.fillText(`${playerData.charge > 0 ? '+' : ''}${playerData.charge}`, 0, -35);
         }
         
+        // 如果玩家有定位锚效果，绘制锚定特效
+        const hasAnchor = playerData && playerData.effects && playerData.effects.some(e => e.type === 'anchor');
+        if (playerData && playerData.effects && playerData.effects.length > 0) {
+            console.log(`[Renderer] 玩家${player.playerId} effects:`, playerData.effects.map(e => e.type));
+        }
+        if (hasAnchor) {
+            // 锚定光环 - 旋转的锁链环
+            const time = Date.now() / 1000;
+            ctx.beginPath();
+            ctx.arc(0, 0, 32, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(205, 133, 63, 0.8)';
+            ctx.lineWidth = 4;
+            ctx.setLineDash([8, 4]);
+            ctx.lineDashOffset = time * 20;
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 锚定锁链 - 四条链从中心向外延伸
+            for (let i = 0; i < 4; i++) {
+                const angle = (i / 4) * Math.PI * 2 + time * 0.5;
+                const innerR = 22;
+                const outerR = 34;
+                ctx.beginPath();
+                ctx.moveTo(Math.cos(angle) * innerR, Math.sin(angle) * innerR);
+                ctx.lineTo(Math.cos(angle) * outerR, Math.sin(angle) * outerR);
+                ctx.strokeStyle = 'rgba(205, 133, 63, 0.9)';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                // 链节端点
+                ctx.beginPath();
+                ctx.arc(Math.cos(angle) * outerR, Math.sin(angle) * outerR, 3, 0, Math.PI * 2);
+                ctx.fillStyle = '#CD853F';
+                ctx.fill();
+            }
+
+            // 锚定图标
+            ctx.fillStyle = '#CD853F';
+            ctx.font = '18px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('⚓', 0, 32);
+        }
+
         ctx.fillStyle = player.playerId === 1 ? '#FF6B35' : '#1E90FF';
         ctx.fillRect(-w/2, -h/2, w, h);
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = hasAnchor ? '#CD853F' : '#fff';
+        ctx.lineWidth = hasAnchor ? 3 : 2;
         ctx.strokeRect(-w/2, -h/2, w, h);
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 14px sans-serif';

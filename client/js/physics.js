@@ -13,7 +13,13 @@ class PhysicsEngine {
         this.softRopeConstraint = null; // 保存软绳约束
         this.softRopeOriginalLength = 0; // 软绳原长
         this.isSoftRopeLocked = false; // 软绳是否已锁定
+        this.anchoredPlayerIds = []; // 有定位锚的玩家ID列表
         this.createArena();
+    }
+
+    // 检查玩家是否有定位锚
+    isPlayerAnchored(playerId) {
+        return this.anchoredPlayerIds.indexOf(playerId) !== -1;
     }
 
     /**
@@ -160,12 +166,39 @@ class PhysicsEngine {
         player.playerId = playerId;
         this.players.push(player);
         Matter.World.add(this.world, player);
+
+        // 添加碰撞监听，处理有定位锚的玩家碰撞问题
+        Matter.Events.on(this.engine, 'collisionStart', (event) => {
+            const pairs = event.pairs;
+            for (let i = 0; i < pairs.length; i++) {
+                const bodyA = pairs[i].bodyA;
+                const bodyB = pairs[i].bodyB;
+
+                // 检查碰撞双方是否是玩家
+                if (bodyA.playerId && bodyB.playerId) {
+                    const aAnchored = this.isPlayerAnchored(bodyA.playerId);
+                    const bAnchored = this.isPlayerAnchored(bodyB.playerId);
+
+                    // 如果任意一方有定位锚，碰撞后立即重置有锚玩家的位置和速度
+                    if (aAnchored && bodyA._startPos) {
+                        Matter.Body.setPosition(bodyA, { x: bodyA._startPos.x, y: bodyA._startPos.y });
+                        Matter.Body.setVelocity(bodyA, { x: 0, y: 0 });
+                    }
+                    if (bAnchored && bodyB._startPos) {
+                        Matter.Body.setPosition(bodyB, { x: bodyB._startPos.x, y: bodyB._startPos.y });
+                        Matter.Body.setVelocity(bodyB, { x: 0, y: 0 });
+                    }
+                }
+            }
+        });
+
         return player;
     }
 
     applyForce(playerId, forceX, forceY) {
         const player = this.getPlayer(playerId);
-        if (player) {
+        // 有定位锚的玩家完全不受力
+        if (player && !this.isPlayerAnchored(playerId)) {
             Matter.Body.applyForce(player, player.position, {
                 x: forceX,
                 y: forceY
@@ -175,7 +208,8 @@ class PhysicsEngine {
 
     applyImpulse(playerId, impulseX, impulseY) {
         const player = this.getPlayer(playerId);
-        if (player) {
+        // 有定位锚的玩家完全不受冲量
+        if (player && !this.isPlayerAnchored(playerId)) {
             const mass = player.mass;
             const velocityChange = {
                 x: impulseX / mass,
@@ -196,44 +230,87 @@ class PhysicsEngine {
     }
 
     update(deltaTime) {
+        // ========== 物理更新前先强制重置有定位锚的玩家 ==========
+        for (let i = 0; i < this.players.length; i++) {
+            const player = this.players[i];
+            if (player._anchorPos && this.isPlayerAnchored(player.playerId)) {
+                Matter.Body.setPosition(player, { x: player._anchorPos.x, y: player._anchorPos.y });
+                Matter.Body.setVelocity(player, { x: 0, y: 0 });
+                Matter.Body.setAngularVelocity(player, 0);
+            }
+        }
+
         this.processEffects();
-        
+
         // 更新临时特效
         this.tempEffects = this.tempEffects.filter(effect => {
             effect.life -= deltaTime;
             return effect.life > 0;
         });
-        
-        Matter.Engine.update(this.engine, deltaTime);
+
+        // ========== 在 Matter 更新期间，我们分步更新并多次重置 ==========
+        const steps = 5; // 分5小步更新，每步后都重置
+        const stepDelta = deltaTime / steps;
+        for (let s = 0; s < steps; s++) {
+            Matter.Engine.update(this.engine, stepDelta);
+
+            // 每次小更新后立即强制重置
+            for (let i = 0; i < this.players.length; i++) {
+                const player = this.players[i];
+                if (player._anchorPos && this.isPlayerAnchored(player.playerId)) {
+                    Matter.Body.setPosition(player, { x: player._anchorPos.x, y: player._anchorPos.y });
+                    Matter.Body.setVelocity(player, { x: 0, y: 0 });
+                    Matter.Body.setAngularVelocity(player, 0);
+                }
+            }
+        }
+
+        // ========== 最后再强制重置一次 ==========
+        for (let i = 0; i < this.players.length; i++) {
+            const player = this.players[i];
+            if (player._anchorPos && this.isPlayerAnchored(player.playerId)) {
+                Matter.Body.setPosition(player, { x: player._anchorPos.x, y: player._anchorPos.y });
+                Matter.Body.setVelocity(player, { x: 0, y: 0 });
+                Matter.Body.setAngularVelocity(player, 0);
+            }
+        }
     }
 
     processEffects() {
         this.effects.forEach(effect => {
             // 处理软绳约束
             if (effect.type === 'soft_rope' && this.players.length >= 2) {
-                const dx = this.players[1].position.x - this.players[0].position.x;
-                const dy = this.players[1].position.y - this.players[0].position.y;
-                const currentDist = Math.sqrt(dx * dx + dy * dy);
-                
-                // 检查是否超过原长
-                if (currentDist > this.softRopeOriginalLength && !this.isSoftRopeLocked) {
-                    // 超过原长，立即锁定为刚性约束
-                    this.isSoftRopeLocked = true;
-                    
-                    // 创建约束
-                    this.softRopeConstraint = Matter.Constraint.create({
-                        bodyA: this.players[0],
-                        bodyB: this.players[1],
-                        stiffness: 0.95,
-                        length: this.softRopeOriginalLength,
-                        damping: 0.1
-                    });
-                    
-                    Matter.World.add(this.world, this.softRopeConstraint);
+                // 如果任意一个玩家有定位锚，不处理软绳约束
+                const p1Anchored = this.isPlayerAnchored(1);
+                const p2Anchored = this.isPlayerAnchored(2);
+                if (!p1Anchored && !p2Anchored) {
+                    const dx = this.players[1].position.x - this.players[0].position.x;
+                    const dy = this.players[1].position.y - this.players[0].position.y;
+                    const currentDist = Math.sqrt(dx * dx + dy * dy);
+
+                    // 检查是否超过原长
+                    if (currentDist > this.softRopeOriginalLength && !this.isSoftRopeLocked) {
+                        // 超过原长，立即锁定为刚性约束
+                        this.isSoftRopeLocked = true;
+
+                        // 创建约束
+                        this.softRopeConstraint = Matter.Constraint.create({
+                            bodyA: this.players[0],
+                            bodyB: this.players[1],
+                            stiffness: 0.95,
+                            length: this.softRopeOriginalLength,
+                            damping: 0.1
+                        });
+
+                        Matter.World.add(this.world, this.softRopeConstraint);
+                    }
                 }
             }
             else if (effect.type === 'gravityField' || effect.type === 'repulsionField') {
                 this.players.forEach(player => {
+                    // 有定位锚的玩家不受力场影响
+                    if (this.isPlayerAnchored(player.playerId)) return;
+
                     const dx = effect.x - player.position.x;
                     const dy = effect.y - player.position.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -271,6 +348,9 @@ class PhysicsEngine {
             } else if (effect.type === 'dampingField') {
                 // 阻尼领域：以施法者为中心，范围内速度快速衰减
                 this.players.forEach(player => {
+                    // 有定位锚的玩家不受阻尼影响
+                    if (this.isPlayerAnchored(player.playerId)) return;
+
                     const dx = effect.x - player.position.x;
                     const dy = effect.y - player.position.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
