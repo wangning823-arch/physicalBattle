@@ -315,7 +315,7 @@ class Game {
                 selfPlayer.heatEngine = {
                     active: true,
                     charge: 0,
-                    maxCharge: 4,
+                    maxCharge: 3,
                     duration: 3, // 3个回合有效期：使用回合 + 2个完整回合
                     ownerTurnsRemaining: 3, // 明确跟踪属于热机拥有者的剩余回合数
                     ownerId: playerId,

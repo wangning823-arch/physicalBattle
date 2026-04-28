@@ -27,9 +27,9 @@ const CARDS_DATABASE = [
         type: CARD_TYPES.TERRAIN,
         cost: 2,
         icon: '🌀',
-        description: '在指定位置放置引力源，持续3回合',
+        description: '在指定位置放置引力源，持续2回合',
         formula: 'F = G·M/r²',
-        effect: { duration: 3, radius: 150, strength: 200, needsAim: true, placeAnywhere: true },
+        effect: { duration: 2, radius: 150, strength: 200, needsAim: true, placeAnywhere: true },
         rarity: 'rare'
     },
     {
@@ -203,9 +203,9 @@ const CARDS_DATABASE = [
         type: CARD_TYPES.UTILITY,
         cost: 4,
         icon: '⚙️🔥',
-        description: '召唤热机附身，2回合内可充能4点触发3倍动量冲击的强力冲量，被冰冻则能量归零',
+        description: '召唤热机附身，2回合内可充能3点触发3倍动量冲击的强力冲量，被冰冻则能量归零',
         formula: 'W = Q·η',
-        effect: { heatEngine: true, duration: 2, maxCharge: 4, impulseMultiplier: 3 },
+        effect: { heatEngine: true, duration: 2, maxCharge: 3, impulseMultiplier: 3 },
         rarity: 'epic'
     }
 ];
