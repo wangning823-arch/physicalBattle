@@ -172,7 +172,8 @@ class Game {
                                 endX: closestX,
                                 endY: closestY,
                                 life: 500,
-                                maxLife: 500
+                                maxLife: 500,
+                                _seed: Date.now() + playerId * 1000
                             });
                         }
                         // 未击中则不出效果
@@ -188,6 +189,17 @@ class Game {
                         const impulseX = (dx / dist) * card.effect.impulse;
                         const impulseY = (dy / dist) * card.effect.impulse;
                         this.physics.applyImpulse(playerId, impulseX, impulseY);
+                        // 冲刺残影特效
+                        const angle = Math.atan2(dy, dx);
+                        this.physics.addTempEffect({
+                            type: 'dash_trail',
+                            x: selfPhysics.position.x,
+                            y: selfPhysics.position.y,
+                            angle: angle,
+                            life: 400,
+                            maxLife: 400,
+                            _seed: Date.now() + playerId * 3000
+                        });
                     }
                 }
                 break;
@@ -199,7 +211,8 @@ class Game {
                         y: aimTarget.y,
                         radius: card.effect.radius,
                         strength: card.effect.strength,
-                        duration: card.effect.duration
+                        duration: card.effect.duration,
+                        _seed: Date.now() + 1111
                     });
                 }
                 break;
@@ -211,7 +224,8 @@ class Game {
                         y: selfPhysics.position.y,
                         radius: card.effect.radius,
                         strength: -card.effect.strength,
-                        duration: card.effect.duration
+                        duration: card.effect.duration,
+                        _seed: Date.now() + 2222
                     });
                 }
                 break;
@@ -224,7 +238,8 @@ class Game {
                         y: aimTarget.y,
                         radius: card.effect.radius,
                         airFriction: card.effect.airFriction,
-                        duration: card.effect.duration
+                        duration: card.effect.duration,
+                        _seed: Date.now() + 4444
                     });
                 }
                 break;
@@ -242,6 +257,16 @@ class Game {
                         remainingTurns: card.effect.duration,
                         originalMass: originalMass,
                         startTurn: selfPlayer.turnsPlayed
+                    });
+                    // 质量变化特效
+                    this.physics.addTempEffect({
+                        type: 'mass_change',
+                        x: selfPhysics.position.x,
+                        y: selfPhysics.position.y,
+                        massMultiplier: card.effect.multiplier,
+                        life: 600,
+                        maxLife: 600,
+                        _seed: Date.now() + 6666
                     });
                 }
                 break;
@@ -286,7 +311,8 @@ class Game {
                                 x: closestX,
                                 y: closestY,
                                 life: 700,
-                                maxLife: 700
+                                maxLife: 700,
+                                _seed: Date.now() + playerId * 2000
                             });
                         }
                     }
@@ -338,7 +364,8 @@ class Game {
                         x: aimTarget.x,
                         y: aimTarget.y,
                         radius: card.effect.radius,
-                        duration: card.effect.duration
+                        duration: card.effect.duration,
+                        _seed: Date.now() + 9999
                     });
                 }
                 break;
@@ -348,6 +375,18 @@ class Game {
                 if (targetPlayer && !targetPlayer.eliminated) {
                     targetPlayer.charge += card.effect.charge;
                     targetPlayer.chargeDuration = card.effect.duration;
+                    // 电荷附加特效
+                    if (targetPhysics) {
+                        this.physics.addTempEffect({
+                            type: 'charge_apply',
+                            x: targetPhysics.position.x,
+                            y: targetPhysics.position.y,
+                            charge: card.effect.charge,
+                            life: 500,
+                            maxLife: 500,
+                            _seed: Date.now() + 4444
+                        });
+                    }
                 }
                 break;
             case 'self_charge':
@@ -355,6 +394,18 @@ class Game {
                 // 给自己累加电荷
                 selfPlayer.charge += card.effect.charge;
                 selfPlayer.chargeDuration = card.effect.duration;
+                // 自身电荷特效
+                if (selfPhysics) {
+                    this.physics.addTempEffect({
+                        type: 'charge_apply',
+                        x: selfPhysics.position.x,
+                        y: selfPhysics.position.y,
+                        charge: card.effect.charge,
+                        life: 500,
+                        maxLife: 500,
+                        _seed: Date.now() + 5555
+                    });
+                }
                 break;
             case 'ice_zone':
                 // 冰霜地带 - 重置对方热机能量
@@ -367,7 +418,8 @@ class Game {
                             x: targetPhysics.position.x,
                             y: targetPhysics.position.y,
                             life: 800,
-                            maxLife: 800
+                            maxLife: 800,
+                            _seed: Date.now() + 3333
                         });
                     }
                 }
@@ -379,7 +431,8 @@ class Game {
                         y: aimTarget.y,
                         radius: card.effect.radius,
                         friction: card.effect.friction,
-                        duration: card.effect.duration
+                        duration: card.effect.duration,
+                        _seed: Date.now() + 6666
                     });
                 }
                 break;
@@ -401,7 +454,8 @@ class Game {
                         x: selfPhysics.position.x,
                         y: selfPhysics.position.y,
                         life: 500,
-                        maxLife: 500
+                        maxLife: 500,
+                        _seed: Date.now() + 5555
                     });
                 }
                 break;
@@ -417,7 +471,8 @@ class Game {
                         x: selfPhysics.position.x,
                         y: selfPhysics.position.y,
                         life: 1000,
-                        maxLife: 1000
+                        maxLife: 1000,
+                        _seed: Date.now() + 7777
                     });
                 }
                 console.log('使用量子叠加后 physics.effects:', this.physics.effects.map(e => ({ type: e.type, duration: e.duration })));
@@ -513,7 +568,8 @@ class Game {
                 x: newX,
                 y: newY,
                 life: 800,
-                maxLife: 800
+                maxLife: 800,
+                _seed: Date.now() + 8888
             });
         }
         player.quantumState = null; // 恢复正常
@@ -545,13 +601,14 @@ class Game {
                 const impulseY = (dy / dist) * impulse;
                 this.physics.applyImpulse(targetId, impulseX, impulseY);
 
-                // 添加热机爆发特效 - 更壮观的特效！
+                // 添加热机爆发特效 - 预生成粒子
                 this.physics.addTempEffect({
                     type: 'heat_engine_blast',
                     x: targetPhysics.position.x,
                     y: targetPhysics.position.y,
                     life: 1500,
-                    maxLife: 1500
+                    maxLife: 1500,
+                    _seed: Date.now() + 9999
                 });
             }
         }
@@ -586,13 +643,14 @@ class Game {
                     const impulseY = (dy / dist) * impulse;
                     this.physics.applyImpulse(targetId, impulseX, impulseY);
 
-                    // 添加热机爆发特效 - 更壮观的特效！
+                    // 添加热机爆发特效 - 预生成粒子
                     this.physics.addTempEffect({
                         type: 'heat_engine_blast',
                         x: targetPhysics.position.x,
                         y: targetPhysics.position.y,
                         life: 1500,
-                        maxLife: 1500
+                        maxLife: 1500,
+                        _seed: Date.now() + 11111
                     });
                 }
             }
