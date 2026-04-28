@@ -16,6 +16,7 @@ deploy-test.sh
 .env.development.local
 .env.test.local
 .env.production.local
+.claude
 
 # Build outputs
 dist/
