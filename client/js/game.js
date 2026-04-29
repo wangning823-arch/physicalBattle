@@ -609,7 +609,8 @@ class Game {
                     y: targetPhysics.position.y,
                     life: 1500,
                     maxLife: 1500,
-                    _seed: Date.now() + 9999
+                    _seed: Date.now() + 9999,
+                    _startTime: Date.now()
                 });
             }
         }
@@ -813,13 +814,17 @@ class Game {
                     const dx = p2Physics.position.x - p1Physics.position.x;
                     const dy = p2Physics.position.y - p1Physics.position.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
+                    const MIN_DIST = 50; // 最小距离，防止近距离力爆炸
 
-                    if (dist > 20) {
+                    if (dist > MIN_DIST) {
                         const k = 5000;
-                        const impulseMagnitude = k * q1 * q2 / (dist * dist) * 15;
+                        // 用 MIN_DIST 限制最大力，防止近距离震荡
+                        const effectiveDist = Math.max(dist, MIN_DIST);
+                        let impulseMagnitude = k * q1 * q2 / (effectiveDist * effectiveDist) * 15;
+                        // 限制最大力
+                        const MAX_IMPULSE = 8;
+                        impulseMagnitude = Math.max(-MAX_IMPULSE, Math.min(MAX_IMPULSE, impulseMagnitude));
                         const angle = Math.atan2(dy, dx);
-
-                        console.log(`库仑力生效: q1=${q1}, q2=${q2}, dist=${dist.toFixed(2)}, impulse=${impulseMagnitude.toFixed(4)}`);
 
                         // 只对没有定位锚的玩家施加冲量
                         if (!hasAnchor[0]) {
@@ -828,6 +833,19 @@ class Game {
                         if (!hasAnchor[1]) {
                             this.physics.applyImpulse(2, Math.cos(angle) * impulseMagnitude, Math.sin(angle) * impulseMagnitude);
                         }
+                    }
+
+                    // 异性电荷近距离阻尼：防止吸在一起后抖动
+                    if (q1 * q2 < 0 && dist < 80) {
+                        const dampFactor = 0.85;
+                        Matter.Body.setVelocity(p1Physics, {
+                            x: p1Physics.velocity.x * dampFactor,
+                            y: p1Physics.velocity.y * dampFactor
+                        });
+                        Matter.Body.setVelocity(p2Physics, {
+                            x: p2Physics.velocity.x * dampFactor,
+                            y: p2Physics.velocity.y * dampFactor
+                        });
                     }
                 }
             }

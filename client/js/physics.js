@@ -243,8 +243,13 @@ class PhysicsEngine {
         this.processEffects();
 
         // 更新临时特效
+        const now = Date.now();
         this.tempEffects = this.tempEffects.filter(effect => {
             effect.life -= deltaTime;
+            // 双重保险：如果 _startTime 存在，用真实时间判断是否过期
+            if (effect._startTime && (now - effect._startTime) > effect.maxLife) {
+                return false;
+            }
             return effect.life > 0;
         });
 

@@ -395,6 +395,85 @@ class Renderer {
             }
         }
 
+        // 热机状态指示器
+        if (playerData && playerData.heatEngine && playerData.heatEngine.active) {
+            const he = playerData.heatEngine;
+            const isFull = he.charge >= he.maxCharge;
+            const yOff = -50;
+
+            ctx.save();
+
+            // 背景面板
+            ctx.globalAlpha = 0.7;
+            ctx.fillStyle = '#1a0a00';
+            const bx = -30, by = yOff - 12, bw = 60, bh = 24, br = 6;
+            ctx.beginPath();
+            ctx.moveTo(bx + br, by);
+            ctx.lineTo(bx + bw - br, by);
+            ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + br);
+            ctx.lineTo(bx + bw, by + bh - br);
+            ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - br, by + bh);
+            ctx.lineTo(bx + br, by + bh);
+            ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - br);
+            ctx.lineTo(bx, by + br);
+            ctx.quadraticCurveTo(bx, by, bx + br, by);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = isFull ? '#FF4400' : '#FF8800';
+            ctx.lineWidth = 1.5;
+            ctx.globalAlpha = isFull ? 0.9 : 0.6;
+            ctx.stroke();
+
+            // 火焰图标
+            ctx.globalAlpha = 1;
+            ctx.font = '14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('🔥', -18, yOff);
+
+            // 充能格子
+            for (let i = 0; i < he.maxCharge; i++) {
+                const px = -4 + i * 12;
+                const filled = i < he.charge;
+                ctx.beginPath();
+                ctx.arc(px, yOff, 4, 0, Math.PI * 2);
+                ctx.fillStyle = filled ? '#FF6600' : '#333';
+                ctx.fill();
+                if (filled) {
+                    ctx.shadowColor = '#FF4400';
+                    ctx.shadowBlur = 6;
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
+            }
+
+            // 满充能时的脉动光环
+            if (isFull) {
+                ctx.globalAlpha = 0.4 + 0.3 * Math.sin(time * 6);
+                ctx.beginPath();
+                ctx.arc(0, 0, 35, 0, Math.PI * 2);
+                ctx.strokeStyle = '#FF4400';
+                ctx.lineWidth = 3;
+                ctx.shadowColor = '#FF2200';
+                ctx.shadowBlur = 20;
+                ctx.stroke();
+
+                // 火焰粒子
+                for (let i = 0; i < 6; i++) {
+                    const angle = (i / 6) * Math.PI * 2 + time * 3;
+                    const r = 30 + Math.sin(time * 5 + i * 2) * 5;
+                    const fx = Math.cos(angle) * r;
+                    const fy = Math.sin(angle) * r;
+                    ctx.beginPath();
+                    ctx.arc(fx, fy, 2 + Math.sin(time * 8 + i) * 1, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255,${100 + i * 20},0,${0.5 + 0.3 * Math.sin(time * 6 + i)})`;
+                    ctx.fill();
+                }
+            }
+
+            ctx.restore();
+        }
+
         // 玩家本体
         const pColor = player.playerId === 1 ? '#FF6B35' : '#1E90FF';
         ctx.fillStyle = pColor;
@@ -816,9 +895,19 @@ class Renderer {
     // ========== Temp Effects ==========
 
     drawTempEffects(tempEffects) {
+        const now = Date.now();
         tempEffects.forEach(effect => {
+            try {
             const ctx = this.ctx;
-            const progress = effect.life / effect.maxLife;
+            // 备用进度计算：如果 effect 有 _startTime，用真实时间计算 progress
+            // 防止 life 没正常递减导致特效卡住
+            let progress;
+            if (effect._startTime) {
+                const elapsed = now - effect._startTime;
+                progress = Math.max(0, 1 - elapsed / effect.maxLife);
+            } else {
+                progress = effect.life / effect.maxLife;
+            }
             const t = Date.now() / 1000;
             ctx.save();
 
@@ -945,78 +1034,128 @@ class Renderer {
                 }
 
             } else if (effect.type === 'heat_engine_blast') {
-                // 🔥 热机超级爆炸 - 预生成粒子！
+                try {
+                // 🔥 热机超级爆炸 - 全屏闪光 + 多层冲击波 + 大量粒子
                 const x = this.centerX + (effect.x || 0);
                 const y = this.centerY + (effect.y || 0);
                 const alpha = progress;
+                const seed = effect._seed || 8888;
 
-                // 1. 超亮核心白光
-                const coreR = 60 * progress;
+                // 0. 全屏闪光（爆炸瞬间）
+                if (progress > 0.85) {
+                    const flashAlpha = (progress - 0.85) / 0.15 * 0.35;
+                    ctx.fillStyle = `rgba(255,200,100,${flashAlpha})`;
+                    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                }
+
+                // 1. 超大核心白光
+                const coreR = 80 * Math.max(0, 1 - progress * 0.5);
                 const coreGrad = ctx.createRadialGradient(x, y, 0, x, y, coreR);
                 coreGrad.addColorStop(0, `rgba(255,255,255,${alpha})`);
-                coreGrad.addColorStop(0.3, `rgba(255,200,100,${alpha * 0.8})`);
-                coreGrad.addColorStop(1, 'rgba(255,100,0,0)');
+                coreGrad.addColorStop(0.2, `rgba(255,220,120,${alpha * 0.9})`);
+                coreGrad.addColorStop(0.5, `rgba(255,120,0,${alpha * 0.5})`);
+                coreGrad.addColorStop(1, 'rgba(255,50,0,0)');
                 ctx.beginPath();
                 ctx.arc(x, y, coreR, 0, Math.PI * 2);
                 ctx.fillStyle = coreGrad;
                 ctx.fill();
 
-                // 2. 多层冲击波环
-                for (let wave = 0; wave < 4; wave++) {
-                    const waveR = 40 + wave * 40 + (1 - progress) * 80;
-                    const waveA = alpha * (1 - wave * 0.2);
-                    const waveW = 8 - wave * 1.5;
+                // 2. 多层冲击波环（6层）
+                for (let wave = 0; wave < 6; wave++) {
+                    const waveR = 30 + wave * 35 + (1 - progress) * 120;
+                    const waveA = alpha * (1 - wave * 0.15);
+                    const waveW = 10 - wave * 1.2;
                     ctx.beginPath();
                     ctx.arc(x, y, waveR, 0, Math.PI * 2);
-                    ctx.strokeStyle = `rgba(255,${150 - wave * 30},0,${waveA})`;
-                    ctx.lineWidth = waveW;
+                    ctx.strokeStyle = `rgba(255,${Math.max(0, 180 - wave * 30)},0,${waveA})`;
+                    ctx.lineWidth = Math.max(1, waveW);
                     ctx.stroke();
                 }
 
-                // 3. 预生成火焰粒子（不再用 Math.random()）
-                const seed = effect._seed || 8888;
-                const fireParticles = _makeParticles(seed, 40, { minSpeed: 100, maxSpeed: 250, minSize: 3, maxSize: 8 });
+                // 3. 旋转火焰环
+                ctx.save();
+                ctx.globalAlpha = alpha * 0.5;
+                for (let ring = 0; ring < 2; ring++) {
+                    const ringR = 50 + ring * 30 + (1 - progress) * 60;
+                    const ringAlpha = alpha * (0.4 - ring * 0.15);
+                    this.drawEnergyRing(ctx, x, y, ringR, time * (4 + ring * 2), `rgba(255,${150 - ring * 50},0,${ringAlpha})`, 3);
+                }
+                ctx.restore();
+
+                // 4. 大量火焰粒子（60个）
+                const fireParticles = _makeParticles(seed, 60, { minSpeed: 80, maxSpeed: 300, minSize: 3, maxSize: 10 });
                 fireParticles.forEach(p => {
-                    const dist = p.speed * (1 - progress);
-                    const px = x + Math.cos(p.angle + progress * 0.3) * dist;
-                    const py = y + Math.sin(p.angle + progress * 0.3) * dist;
-                    const sz = p.size * progress;
+                    const dist = p.speed * (1 - progress * progress);
+                    const px = x + Math.cos(p.angle + progress * 0.4) * dist;
+                    const py = y + Math.sin(p.angle + progress * 0.4) * dist;
+                    const sz = p.size * (0.3 + progress * 0.7);
                     const hue = p.hueShift;
-                    const r = 255;
-                    const g = Math.floor(200 + hue * 55);
-                    const b = Math.floor(hue * 50);
+                    const g = Math.floor(150 + hue * 105);
+                    const b = Math.floor(hue * 80);
                     ctx.beginPath();
                     ctx.arc(px, py, sz, 0, Math.PI * 2);
-                    ctx.fillStyle = `rgba(${r},${g},${b},${alpha * 0.9})`;
+                    ctx.fillStyle = `rgba(255,${g},${b},${alpha * 0.85})`;
                     ctx.fill();
                 });
 
-                // 4. 预生成火花粒子
-                const sparkParticles = _makeParticles(seed + 1, 20, { minSpeed: 150, maxSpeed: 350, minSize: 1, maxSize: 3 });
+                // 5. 高速火花粒子（30个）
+                const sparkParticles = _makeParticles(seed + 1, 30, { minSpeed: 200, maxSpeed: 500, minSize: 1, maxSize: 3 });
                 sparkParticles.forEach(p => {
                     const dist = p.speed * (1 - progress);
-                    const px = x + Math.cos(p.angle + progress * 0.5) * dist;
-                    const py = y + Math.sin(p.angle + progress * 0.5) * dist;
+                    const px = x + Math.cos(p.angle + progress * 0.6) * dist;
+                    const py = y + Math.sin(p.angle + progress * 0.6) * dist;
                     ctx.beginPath();
                     ctx.arc(px, py, p.size * progress, 0, Math.PI * 2);
-                    ctx.fillStyle = `rgba(255,255,200,${alpha * 0.8})`;
+                    ctx.fillStyle = `rgba(255,255,200,${alpha * 0.9})`;
                     ctx.fill();
                 });
 
-                // 5. 地面灼烧
-                if (progress > 0.5) {
-                    const burnR = 100 * progress;
+                // 6. 烟雾粒子（向上升腾）
+                const smokeParticles = _makeParticles(seed + 2, 15, { minSpeed: 10, maxSpeed: 40, minSize: 8, maxSize: 20 });
+                smokeParticles.forEach(p => {
+                    const dist = p.speed * (1 - progress);
+                    const rise = (1 - progress) * 80;
+                    const px = x + Math.cos(p.angle) * dist * 0.5;
+                    const py = y - rise + Math.sin(p.angle) * dist * 0.3;
+                    const sz = p.size * (1 + (1 - progress) * 1.5);
+                    ctx.beginPath();
+                    ctx.arc(px, py, sz, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(80,80,80,${alpha * 0.25})`;
+                    ctx.fill();
+                });
+
+                // 7. 地面灼烧 + 熔岩裂纹
+                if (progress > 0.4) {
+                    const burnR = 120 * progress;
                     const burnGrad = ctx.createRadialGradient(x, y, 0, x, y, burnR);
-                    burnGrad.addColorStop(0, `rgba(100,0,0,${(progress - 0.5) * 0.5})`);
+                    burnGrad.addColorStop(0, `rgba(150,30,0,${(progress - 0.4) * 0.6})`);
+                    burnGrad.addColorStop(0.5, `rgba(80,0,0,${(progress - 0.4) * 0.3})`);
                     burnGrad.addColorStop(1, 'rgba(0,0,0,0)');
                     ctx.beginPath();
                     ctx.arc(x, y, burnR, 0, Math.PI * 2);
                     ctx.fillStyle = burnGrad;
                     ctx.fill();
+
+                    // 熔岩裂纹
+                    ctx.globalAlpha = (progress - 0.4) * 0.7;
+                    const rng = _seededRandom(seed + 3);
+                    for (let i = 0; i < 8; i++) {
+                        const angle = rng() * Math.PI * 2;
+                        const len = 20 + rng() * 60;
+                        ctx.beginPath();
+                        ctx.moveTo(x, y);
+                        ctx.lineTo(x + Math.cos(angle) * len, y + Math.sin(angle) * len);
+                        ctx.strokeStyle = `rgba(255,${80 + rng() * 100},0,0.6)`;
+                        ctx.lineWidth = 1 + rng() * 2;
+                        ctx.stroke();
+                    }
+                    ctx.globalAlpha = 1;
                 }
 
-                if (progress > 0.9) triggerShake(10);
+                // 强烈屏幕震动
+                if (progress > 0.9) triggerShake(15);
 
+                } catch (e) { console.error('heat_engine_blast render error:', e); }
             } else if (effect.type === 'ice_reset') {
                 // ❄️ 冰冻重置 - 冰爆 + 冰晶扩散
                 const x = this.centerX + (effect.x || 0);
@@ -1226,6 +1365,7 @@ class Renderer {
             }
 
             ctx.restore();
+            } catch (e) { console.error('Temp effect render error:', e); }
         });
     }
 

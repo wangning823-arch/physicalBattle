@@ -606,26 +606,30 @@ const GameUI = {
     },
 
     gameLoop(currentTime = 0) {
-        const deltaTime = currentTime - this.lastTime;
-        this.lastTime = currentTime;
+        try {
+            const deltaTime = currentTime - this.lastTime;
+            this.lastTime = currentTime;
 
-        this.game.update(deltaTime || 16.67);
-        
-        const state = this.game.getState();
-        const currentPlayerPhysics = state.physicsPlayers.find(p => 
-            p.playerId === this.game.players[this.game.currentPlayerIndex].id
-        );
-        this.game.render(state, this.aimingTarget, currentPlayerPhysics);
-        
-        this.updatePhysicsParamsPanel();
+            this.game.update(deltaTime || 16.67);
 
-        if (this.game.state === GAME_STATES.GAME_OVER) {
-            const alive = this.game.players.filter(p => !p.eliminated);
-            if (alive.length === 1 || alive.length === 0) {
-                this.showGameOver(alive[0] || { id: 0 });
+            const state = this.game.getState();
+            const currentPlayerPhysics = state.physicsPlayers.find(p =>
+                p.playerId === this.game.players[this.game.currentPlayerIndex].id
+            );
+            this.game.render(state, this.aimingTarget, currentPlayerPhysics);
+
+            this.updatePhysicsParamsPanel();
+
+            if (this.game.state === GAME_STATES.GAME_OVER) {
+                const alive = this.game.players.filter(p => !p.eliminated);
+                if (alive.length === 1 || alive.length === 0) {
+                    this.showGameOver(alive[0] || { id: 0 });
+                }
             }
+        } catch (e) {
+            console.error('Game loop error:', e);
         }
-
+        // finally 确保无论是否出错，游戏循环都不会中断
         requestAnimationFrame((time) => this.gameLoop(time));
     }
 };
