@@ -36,7 +36,13 @@ const server = http.createServer((req, res) => {
             }
         }
         else {
-            res.writeHead(200, { 'Content-Type': contentType });
+            // 禁用缓存，确保代码更新后浏览器能立即获取最新版本
+            res.writeHead(200, {
+                'Content-Type': contentType,
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            });
             res.end(content, 'utf-8');
         }
     });

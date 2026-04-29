@@ -492,8 +492,9 @@ class Game {
             this.processPlayerEffects(currentPlayer);
             if (currentPlayer.chargeDuration > 0) {
                 currentPlayer.chargeDuration--;
-                if (currentPlayer.chargeDuration <= 0) {
+                if (currentPlayer.chargeDuration < 0) {
                     currentPlayer.charge = 0;
+                    currentPlayer.chargeDuration = 0;
                 }
             }
 
@@ -664,10 +665,11 @@ class Game {
         if (!player.effects || player.effects.length === 0) return;
 
         // 效果过期规则：从使用的那一刻起，持续 N 个该玩家自己的回合
-        // 例如 duration=1：在该玩家第 turnsPlayed=k 时使用，到第 turnsPlayed=k+1 时过期
+        // 例如 duration=1：在该玩家第 turnsPlayed=k 时使用，到第 turnsPlayed=k+1 的弃牌阶段仍然有效，出牌结束后到 k+2 才过期
+        // 即 duration=N 表示效果在该玩家后续 N 次出牌时仍然有效
         player.effects = player.effects.filter(effect => {
             const elapsed = player.turnsPlayed - effect.startTurn;
-            if (elapsed >= effect.remainingTurns) {
+            if (elapsed > effect.remainingTurns) {
                 // 效果过期，执行清理
                 if (effect.type === 'massChange' && player.originalMass) {
                     this.physics.setPlayerMass(player.id, player.originalMass);
