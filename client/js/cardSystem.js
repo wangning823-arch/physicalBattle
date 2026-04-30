@@ -60,9 +60,9 @@ const CARDS_DATABASE = [
                 type: CARD_TYPES.UTILITY,
                 cost: 1,
                 icon: '⬛',
-                description: '自身质量变为3倍，持续2回合',
+                description: '自身质量变为2倍，持续2回合',
                 formula: 'F = ma',
-                effect: { multiplier: 3, duration: 2 },
+                effect: { multiplier: 2, duration: 2 },
                 rarity: 'common'
             },
             {
@@ -71,9 +71,9 @@ const CARDS_DATABASE = [
                 type: CARD_TYPES.UTILITY,
                 cost: 1,
                 icon: '🔲',
-                description: '自身质量变为0.3倍，持续2回合',
+                description: '自身质量变为0.5倍，持续2回合',
                 formula: 'a = F/m',
-                effect: { multiplier: 0.3, duration: 2 },
+                effect: { multiplier: 0.5, duration: 2 },
                 rarity: 'common'
             },
     {

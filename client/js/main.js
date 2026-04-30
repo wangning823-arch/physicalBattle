@@ -513,6 +513,9 @@ const GameUI = {
             const cardEl = document.createElement('div');
             cardEl.className = 'card';
             cardEl.dataset.index = index;
+            cardEl.dataset.type = card.type;
+            cardEl.dataset.rarity = card.rarity;
+            cardEl.dataset.cost = card.cost;
             if (currentPlayer.energy < card.cost || this.game.turnPhase !== 'play') {
                 cardEl.classList.add('disabled');
             }
@@ -586,21 +589,24 @@ const GameUI = {
         player.cards.forEach((card, index) => {
             const cardEl = document.createElement('div');
             cardEl.className = 'card';
+            cardEl.dataset.type = card.type;
+            cardEl.dataset.rarity = card.rarity;
+            cardEl.dataset.cost = card.cost;
             if (this.game.discardState.selectedIndices.includes(index)) {
                 cardEl.classList.add('selected');
             }
-            
+
             cardEl.innerHTML = `
                 <span class="card-cost">${card.cost}</span>
                 <span class="card-icon">${card.icon}</span>
                 <span class="card-name">${card.name}</span>
             `;
-            
+
             cardEl.addEventListener('click', () => {
                 this.game.toggleDiscardSelection(index);
                 this.updateDiscardModal();
             });
-            
+
             container.appendChild(cardEl);
         });
     },
