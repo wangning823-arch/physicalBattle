@@ -175,39 +175,132 @@ class Renderer {
 
     // ========== Arena ==========
 
+    _initArenaStars(radius) {
+        if (this._arenaStars) return;
+        const rng = _seededRandom(42);
+        this._arenaStars = [];
+        for (let i = 0; i < 80; i++) {
+            const angle = rng() * Math.PI * 2;
+            const dist = rng() * radius * 0.92;
+            this._arenaStars.push({
+                x: Math.cos(angle) * dist,
+                y: Math.sin(angle) * dist,
+                size: 0.5 + rng() * 1.5,
+                blinkSpeed: 1 + rng() * 3,
+                blinkPhase: rng() * Math.PI * 2
+            });
+        }
+    }
+
+    _initEnergyArcs(radius) {
+        if (this._energyArcs) return;
+        const rng = _seededRandom(99);
+        this._energyArcs = [];
+        for (let i = 0; i < 8; i++) {
+            this._energyArcs.push({
+                baseAngle: (i / 8) * Math.PI * 2,
+                innerR: radius * (0.2 + rng() * 0.3),
+                outerR: radius * (0.6 + rng() * 0.35),
+                speed: 0.1 + rng() * 0.15,
+                width: 1 + rng() * 1.5
+            });
+        }
+    }
+
     drawArena(radius) {
         const ctx = this.ctx;
+        const t = Date.now() / 1000;
         ctx.save();
         ctx.translate(this.centerX, this.centerY);
+
+        // 裁剪到圆形竞技场
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.clip();
+
+        // 深空背景渐变
         ctx.beginPath();
         ctx.arc(0, 0, radius, 0, Math.PI * 2);
         const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
-        gradient.addColorStop(0, '#1a1a2e');
-        gradient.addColorStop(0.7, '#252540');
-        gradient.addColorStop(1, '#3a3a5a');
+        gradient.addColorStop(0, '#0d0d2b');
+        gradient.addColorStop(0.4, '#111133');
+        gradient.addColorStop(0.75, '#1a1a3e');
+        gradient.addColorStop(1, '#252550');
         ctx.fillStyle = gradient;
         ctx.fill();
 
-        // 边界光环动画
-        const t = Date.now() / 1000;
+        // 星空粒子
+        this._initArenaStars(radius);
+        this._arenaStars.forEach(star => {
+            const alpha = 0.3 + 0.7 * Math.abs(Math.sin(t * star.blinkSpeed + star.blinkPhase));
+            ctx.beginPath();
+            ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(200,220,255,${alpha})`;
+            ctx.fill();
+        });
+
+        // 能量流动弧线
+        this._initEnergyArcs(radius);
+        this._energyArcs.forEach(arc => {
+            const angle = arc.baseAngle + t * arc.speed;
+            ctx.save();
+            ctx.globalAlpha = 0.08 + 0.04 * Math.sin(t * 0.5 + arc.baseAngle);
+            ctx.strokeStyle = '#4488cc';
+            ctx.lineWidth = arc.width;
+            ctx.shadowColor = '#4488cc';
+            ctx.shadowBlur = 6;
+            ctx.beginPath();
+            ctx.arc(0, 0, arc.innerR, angle, angle + 0.8);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(0, 0, arc.outerR, angle + Math.PI, angle + Math.PI + 0.6);
+            ctx.stroke();
+            ctx.restore();
+        });
+
+        ctx.restore();
+
+        // 边界光环（不裁剪，画在圆外）
+        ctx.save();
+        ctx.translate(this.centerX, this.centerY);
+
+        // 外层脉冲光晕
+        ctx.beginPath();
+        ctx.arc(0, 0, radius + 2, 0, Math.PI * 2);
         ctx.shadowColor = '#1E90FF';
-        ctx.shadowBlur = 15 + 5 * Math.sin(t * 2);
-        ctx.strokeStyle = '#1E90FF';
+        ctx.shadowBlur = 20 + 8 * Math.sin(t * 2);
+        ctx.strokeStyle = `rgba(30,144,255,${0.5 + 0.2 * Math.sin(t * 2)})`;
         ctx.lineWidth = 3;
         ctx.stroke();
         ctx.shadowBlur = 0;
 
-        // 赛场边缘能量环
-        ctx.globalAlpha = 0.15;
+        // 双层旋转能量环
+        ctx.globalAlpha = 0.2;
         ctx.strokeStyle = '#4488FF';
-        ctx.lineWidth = 8;
+        ctx.lineWidth = 6;
         ctx.beginPath();
-        ctx.arc(0, 0, radius - 4, t * 0.3, t * 0.3 + Math.PI * 1.5);
+        ctx.arc(0, 0, radius - 3, t * 0.4, t * 0.4 + Math.PI * 1.2);
         ctx.stroke();
+        ctx.globalAlpha = 0.12;
+        ctx.strokeStyle = '#66AAFF';
+        ctx.lineWidth = 4;
         ctx.beginPath();
-        ctx.arc(0, 0, radius - 4, t * 0.3 + Math.PI, t * 0.3 + Math.PI * 2.5);
+        ctx.arc(0, 0, radius + 1, -t * 0.25, -t * 0.25 + Math.PI * 0.9);
         ctx.stroke();
+
+        // 边界脉冲点
         ctx.globalAlpha = 1;
+        for (let i = 0; i < 12; i++) {
+            const a = (i / 12) * Math.PI * 2 + t * 0.3;
+            const pulse = 0.4 + 0.6 * Math.abs(Math.sin(t * 1.5 + i * 0.5));
+            const px = Math.cos(a) * radius;
+            const py = Math.sin(a) * radius;
+            ctx.beginPath();
+            ctx.arc(px, py, 2, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(100,180,255,${pulse})`;
+            ctx.fill();
+        }
+
         ctx.restore();
     }
 
@@ -215,13 +308,31 @@ class Renderer {
         const ctx = this.ctx;
         ctx.save();
         ctx.translate(this.centerX, this.centerY);
-        ctx.strokeStyle = 'rgba(30, 144, 255, 0.2)';
+
+        // 裁剪到竞技场内
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.clip();
+
+        // 同心圆网格 - 始终显示
+        ctx.strokeStyle = 'rgba(30, 100, 200, 0.15)';
         ctx.lineWidth = 1;
         for (let r = 50; r < radius; r += 50) {
             ctx.beginPath();
             ctx.arc(0, 0, r, 0, Math.PI * 2);
             ctx.stroke();
         }
+
+        // 径向线条
+        ctx.strokeStyle = 'rgba(30, 100, 200, 0.08)';
+        for (let i = 0; i < 12; i++) {
+            const angle = (i / 12) * Math.PI * 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+            ctx.stroke();
+        }
+
         ctx.restore();
     }
 
@@ -1350,6 +1461,95 @@ class Renderer {
                 ctx.beginPath();
                 ctx.arc(endX, endY, 8 * alpha, 0, Math.PI * 2);
                 ctx.fill();
+
+            } else if (effect.type === 'card_fly') {
+                // 卡牌飞行轨迹
+                const sx = this.centerX + (effect.startX || 0);
+                const sy = this.centerY + (effect.startY || 0);
+                const ex = this.centerX + (effect.endX || 0);
+                const ey = this.centerY + (effect.endY || 0);
+                const alpha = progress;
+
+                // 卡牌类型颜色
+                const typeColors = {
+                    attack: '#ef4444', defense: '#3b82f6', terrain: '#22c55e',
+                    movement: '#f59e0b', utility: '#a855f7'
+                };
+                const color = typeColors[effect.cardType] || '#ffffff';
+
+                // 贝塞尔曲线控制点（向上弯曲）
+                const mx = (sx + ex) / 2;
+                const my = (sy + ey) / 2;
+                const dx = ex - sx, dy = ey - sy;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const cpx = mx - dy * 0.2;
+                const cpy = my + dx * 0.2 - dist * 0.15;
+
+                // 飞行轨迹弧线
+                const headT = 1 - progress;
+                ctx.save();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 3;
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 10;
+                ctx.globalAlpha = alpha * 0.8;
+                ctx.beginPath();
+                ctx.moveTo(sx, sy);
+                ctx.quadraticCurveTo(cpx, cpy, sx + (ex - sx) * (1 - headT), sy + (ey - sy) * (1 - headT));
+                ctx.stroke();
+
+                // 卡牌头部光点
+                const hx = sx + (ex - sx) * (1 - headT);
+                const hy = sy + (ey - sy) * (1 - headT);
+                // 实际沿贝塞尔曲线
+                const bt = 1 - headT;
+                const bhx = (1 - bt) * (1 - bt) * sx + 2 * (1 - bt) * bt * cpx + bt * bt * ex;
+                const bhy = (1 - bt) * (1 - bt) * sy + 2 * (1 - bt) * bt * cpy + bt * bt * ey;
+
+                ctx.beginPath();
+                ctx.arc(bhx, bhy, 5 + 3 * alpha, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.shadowBlur = 15;
+                ctx.fill();
+
+                // 内核白光
+                ctx.beginPath();
+                ctx.arc(bhx, bhy, 2, 0, Math.PI * 2);
+                ctx.fillStyle = '#fff';
+                ctx.fill();
+
+                // 拖尾粒子
+                const rng = _seededRandom(effect._seed || 1234);
+                for (let i = 0; i < 6; i++) {
+                    const pt = Math.max(0, bt - (i + 1) * 0.04);
+                    const ptx = (1 - pt) * (1 - pt) * sx + 2 * (1 - pt) * pt * cpx + pt * pt * ex;
+                    const pty = (1 - pt) * (1 - pt) * sy + 2 * (1 - pt) * pt * cpy + pt * pt * ey;
+                    const spread = (rng() - 0.5) * 12;
+                    const pAlpha = alpha * (1 - i / 6) * 0.6;
+                    ctx.beginPath();
+                    ctx.arc(ptx + spread, pty + spread, 2 * (1 - i / 6), 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255,255,255,${pAlpha * 0.5})`;
+                    ctx.fill();
+                }
+
+                // 到达时的闪光环（最后 30% 进度）
+                if (progress < 0.3) {
+                    const flashAlpha = (0.3 - progress) / 0.3;
+                    const flashR = 20 + (0.3 - progress) * 80;
+                    ctx.beginPath();
+                    ctx.arc(ex, ey, flashR, 0, Math.PI * 2);
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    ctx.globalAlpha = flashAlpha * 0.6;
+                    ctx.shadowBlur = 20;
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(ex, ey, flashR * 0.6, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255,255,255,${flashAlpha * 0.3})`;
+                    ctx.fill();
+                }
+
+                ctx.restore();
             }
 
             ctx.restore();

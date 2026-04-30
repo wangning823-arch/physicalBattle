@@ -126,7 +126,22 @@ class Game {
             (card.effect.targetEnemy || ['momentum_blast', 'explosive_charge', 'charge_attach', 'charge_attach_negative'].includes(card.id))) {
             return; // 卡牌对量子态目标无效
         }
-        
+
+        // 卡牌飞行轨迹特效（有瞄准目标的卡牌）
+        if (aimTarget && selfPhysics) {
+            this.physics.addTempEffect({
+                type: 'card_fly',
+                startX: selfPhysics.position.x,
+                startY: selfPhysics.position.y,
+                endX: aimTarget.x,
+                endY: aimTarget.y,
+                cardType: card.type,
+                life: 300,
+                maxLife: 300,
+                _seed: Date.now()
+            });
+        }
+
         switch (card.id) {
             case 'momentum_blast':
                 if (targetPhysics && aimTarget && selfPhysics) {
