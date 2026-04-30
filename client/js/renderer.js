@@ -651,47 +651,6 @@ class Renderer {
                 ctx.textBaseline = 'middle';
                 ctx.fillText('🧊', x, y);
 
-            } else if (effect.type === 'airFrictionZone') {
-                // 真空地带 - 风线 + 旋涡
-                ctx.save();
-                ctx.shadowColor = '#B0B0C0';
-                ctx.shadowBlur = 10;
-
-                ctx.beginPath();
-                ctx.arc(x, y, effect.radius, 0, Math.PI * 2);
-                const grad = ctx.createRadialGradient(x, y, 0, x, y, effect.radius);
-                grad.addColorStop(0, 'rgba(180,180,200,0.25)');
-                grad.addColorStop(1, 'rgba(150,150,170,0)');
-                ctx.fillStyle = grad;
-                ctx.fill();
-                ctx.restore();
-
-                // 风线 - 螺旋向内
-                for (let i = 0; i < 8; i++) {
-                    const baseAngle = (i / 8) * Math.PI * 2;
-                    const anim = (time * 0.6 + i * 0.3) % 2 / 2;
-                    const angle = baseAngle + anim * Math.PI;
-                    const r1 = effect.radius * (0.4 + anim * 0.5);
-                    const r2 = effect.radius * (0.1 + anim * 0.3);
-                    ctx.globalAlpha = 0.3 * (1 - anim);
-                    ctx.beginPath();
-                    ctx.moveTo(x + Math.cos(angle) * r1, y + Math.sin(angle) * r1);
-                    ctx.lineTo(x + Math.cos(angle) * r2, y + Math.sin(angle) * r2);
-                    ctx.strokeStyle = '#B0B0D0';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                }
-                ctx.globalAlpha = 1;
-
-                // 中心旋涡
-                this.drawSpiral(ctx, x, y, effect.radius * 0.3, 2, -time * 2, '#A0A0C0', 0.3);
-
-                ctx.fillStyle = '#B0B0C0';
-                ctx.font = '24px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('🌫️', x, y);
-
             } else if (effect.type === 'dampingField') {
                 // 阻尼场 - 减速波纹 + 黏稠质感
                 ctx.save();
@@ -811,27 +770,56 @@ class Renderer {
 
                 ctx.save();
                 if (isLocked) {
-                    // 锁定 - 金色能量链 + 电弧
-                    ctx.shadowColor = '#FFD700';
-                    ctx.shadowBlur = 10;
+                    // 锁定 - 蓝色拉伸绳 + 张力可视化
+                    const stretch = Math.max(0, currentDist / originalLength - 1);
+                    const tension = Math.min(1, stretch * 3);
+
+                    ctx.shadowColor = `rgb(${Math.floor(135 + tension * 120)}, ${Math.floor(206 - tension * 100)}, ${Math.floor(235 - tension * 150)})`;
+                    ctx.shadowBlur = 8 + tension * 10;
+
+                    // 绘制带张力的绳子（微微弯曲）
+                    const dx = x2 - x1, dy = y2 - y1;
+                    const len = Math.sqrt(dx * dx + dy * dy);
+                    const nx = -dy / len, ny = dx / len;
+                    const sagAmp = Math.max(2, 15 * (1 - tension)) * Math.sin(time * 2);
+
+                    ctx.beginPath();
+                    ctx.moveTo(x1, y1);
+                    const steps = 16;
+                    for (let i = 1; i < steps; i++) {
+                        const t = i / steps;
+                        const sag = Math.sin(t * Math.PI) * sagAmp;
+                        const px = x1 + dx * t + nx * sag;
+                        const py = y1 + dy * t + ny * sag;
+                        ctx.lineTo(px, py);
+                    }
+                    ctx.lineTo(x2, y2);
+                    ctx.strokeStyle = tension > 0.5
+                        ? `rgb(${Math.floor(255)}, ${Math.floor(100 - tension * 60)}, ${Math.floor(100 - tension * 60)})`
+                        : '#5BA3D9';
+                    ctx.lineWidth = 4;
+                    ctx.stroke();
+
+                    // 张力越大，绳子越细的内芯线
                     ctx.beginPath();
                     ctx.moveTo(x1, y1);
                     ctx.lineTo(x2, y2);
-                    ctx.strokeStyle = '#FFD700';
-                    ctx.lineWidth = 5;
+                    ctx.strokeStyle = `rgba(200,230,255,${0.3 + tension * 0.3})`;
+                    ctx.lineWidth = 1.5;
                     ctx.stroke();
 
-                    // 流动粒子
-                    const dx = x2 - x1, dy = y2 - y1;
-                    for (let i = 0; i < 5; i++) {
-                        const t = ((time * 0.6 + i / 5) % 1);
-                        ctx.beginPath();
-                        ctx.arc(x1 + dx * t, y1 + dy * t, 3, 0, Math.PI * 2);
-                        ctx.fillStyle = `rgba(255,215,0,${Math.sin(t * Math.PI) * 0.8})`;
-                        ctx.fill();
+                    // 张力标记点
+                    if (tension > 0.3) {
+                        for (let i = 0; i < 3; i++) {
+                            const t = 0.3 + i * 0.2;
+                            const px = x1 + dx * t;
+                            const py = y1 + dy * t;
+                            ctx.beginPath();
+                            ctx.arc(px, py, 2 + tension * 2, 0, Math.PI * 2);
+                            ctx.fillStyle = `rgba(255,${Math.floor(150 - tension * 100)},${Math.floor(150 - tension * 100)},${tension * 0.6})`;
+                            ctx.fill();
+                        }
                     }
-
-                    this.drawElectricArc(ctx, x1, y1, x2, y2, '#FFD700', 12, Math.floor(time * 8));
                 } else {
                     // 未锁定 - 柔性绳 + 弹性波动
                     ctx.shadowColor = '#87CEEB';

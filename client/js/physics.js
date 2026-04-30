@@ -10,10 +10,10 @@ class PhysicsEngine {
         this.effects = [];
         this.tempEffects = []; // 临时特效（短时间，如攻击特效）
         this.rigidConstraint = null; // 保存刚性约束
-        this.softRopeConstraint = null; // 保存软绳约束
         this.softRopeOriginalLength = 0; // 软绳原长
         this.isSoftRopeLocked = false; // 软绳是否已锁定
         this.anchoredPlayerIds = []; // 有定位锚的玩家ID列表
+        this.currentRound = 1; // 当前回合数，用于效果持续时间计算
         this.createArena();
     }
 
@@ -26,35 +26,30 @@ class PhysicsEngine {
      * 更新效果的剩余回合数（每回合调用一次）
      */
     updateEffectsTurn() {
-        console.log('=== updateEffectsTurn 被调用 ===');
-        console.log('当前 effects:', this.effects.map(e => ({ type: e.type, duration: e.duration })));
-        
-        // 处理普通效果，但要保留约束效果，只减少它们的duration
-        this.effects = this.effects.filter(effect => {
-            // 如果是约束效果，只减少 duration，不过滤
-            if (effect.type === 'rigid_constraint' || effect.type === 'soft_rope') {
-                if (effect.duration > 0) {
-                    effect.duration--;
-                    console.log(`约束 ${effect.type} duration 减到 ${effect.duration}`);
-                    if (effect.duration <= 0) {
-                        console.log(`约束 ${effect.type} 结束了`);
-                        return false;
-                    }
-                }
-                return true;
-            }
-            
-            // 处理普通效果
-            if (effect.duration > 0) {
+        // 只减少非当前回合创建的效果的 duration
+        // 这样确保当回合创建的效果至少存活到下一个回合
+        this.effects.forEach(effect => {
+            if (effect.duration > 0 && effect._createdRound !== this.currentRound) {
                 effect.duration--;
-                if (effect.duration <= 0) {
-                    // 效果结束，恢复玩家属性
+            }
+        });
+
+        // 第二步：再过滤掉 duration <= 0 的效果
+        this.effects = this.effects.filter(effect => {
+            if (effect.duration <= 0) {
+                // 效果结束，恢复玩家属性
+                if (effect.type === 'frictionZone') {
                     this.players.forEach(player => {
                         player.friction = PLAYER_CONFIG.FRICTION;
+                        player.groundFriction = PLAYER_CONFIG.GROUND_FRICTION;
+                    });
+                }
+                if (effect.type === 'airFrictionZone') {
+                    this.players.forEach(player => {
                         player.frictionAir = PLAYER_CONFIG.AIR_FRICTION;
                     });
-                    return false;
                 }
+                return false;
             }
             return true;
         });
@@ -72,16 +67,12 @@ class PhysicsEngine {
         // 检查是否有软绳约束效果需要处理
         const softRopeEffect = this.effects.find(e => e.type === 'soft_rope');
         if (!softRopeEffect) {
-            if (this.softRopeConstraint) {
-                console.log('移除软绳约束，因为 effects 中没有了');
-                Matter.World.remove(this.world, this.softRopeConstraint);
-                this.softRopeConstraint = null;
-            }
             this.softRopeOriginalLength = 0;
             this.isSoftRopeLocked = false;
-        } else {
-            console.log('软绳约束仍然存在，duration:', softRopeEffect.duration);
         }
+
+        // 回合结束，推进回合计数
+        this.currentRound++;
     }
 
     /**
@@ -124,12 +115,6 @@ class PhysicsEngine {
     createSoftRope(duration) {
         console.log('=== createSoftRope 被调用，duration:', duration);
         if (this.players.length < 2) return;
-        
-        // 如果已经有软绳约束，先移除
-        if (this.softRopeConstraint) {
-            Matter.World.remove(this.world, this.softRopeConstraint);
-            this.softRopeConstraint = null;
-        }
         
         // 计算并保存初始距离（原长）
         const dx = this.players[1].position.x - this.players[0].position.x;
@@ -242,6 +227,28 @@ class PhysicsEngine {
 
         this.processEffects();
 
+        // ========== 应用地面摩擦力 ==========
+        for (let i = 0; i < this.players.length; i++) {
+            const player = this.players[i];
+            const vx = player.velocity.x;
+            const vy = player.velocity.y;
+            const speed = Math.sqrt(vx * vx + vy * vy);
+
+            if (speed > 0.01) {
+                // 获取当前玩家的地面摩擦系数
+                const friction = player.groundFriction || PLAYER_CONFIG.GROUND_FRICTION;
+                // 按比例减速
+                const factor = 1 - friction;
+                Matter.Body.setVelocity(player, {
+                    x: vx * factor,
+                    y: vy * factor
+                });
+            } else {
+                // 速度很小时直接停止
+                Matter.Body.setVelocity(player, { x: 0, y: 0 });
+            }
+        }
+
         // 更新临时特效
         const now = Date.now();
         this.tempEffects = this.tempEffects.filter(effect => {
@@ -289,25 +296,26 @@ class PhysicsEngine {
                 const p1Anchored = this.isPlayerAnchored(1);
                 const p2Anchored = this.isPlayerAnchored(2);
                 if (!p1Anchored && !p2Anchored) {
-                    const dx = this.players[1].position.x - this.players[0].position.x;
-                    const dy = this.players[1].position.y - this.players[0].position.y;
+                    const p1 = this.players[0];
+                    const p2 = this.players[1];
+                    const dx = p2.position.x - p1.position.x;
+                    const dy = p2.position.y - p1.position.y;
                     const currentDist = Math.sqrt(dx * dx + dy * dy);
 
-                    // 检查是否超过原长
+                    // 锁定状态：超过原长时锁定（视觉和行为切换）
                     if (currentDist > this.softRopeOriginalLength && !this.isSoftRopeLocked) {
-                        // 超过原长，立即锁定为刚性约束
                         this.isSoftRopeLocked = true;
+                    }
 
-                        // 创建约束
-                        this.softRopeConstraint = Matter.Constraint.create({
-                            bodyA: this.players[0],
-                            bodyB: this.players[1],
-                            stiffness: 0.95,
-                            length: this.softRopeOriginalLength,
-                            damping: 0.1
-                        });
-
-                        Matter.World.add(this.world, this.softRopeConstraint);
+                    // 超过原长时施加拉力（只阻止增大，不阻止缩小）
+                    if (currentDist > this.softRopeOriginalLength) {
+                        const overshoot = currentDist - this.softRopeOriginalLength;
+                        const forceMag = overshoot * 0.0008;
+                        const nx = dx / currentDist;
+                        const ny = dy / currentDist;
+                        // 把两个玩家往中间拉
+                        Matter.Body.applyForce(p1, p1.position, { x: nx * forceMag, y: ny * forceMag });
+                        Matter.Body.applyForce(p2, p2.position, { x: -nx * forceMag, y: -ny * forceMag });
                     }
                 }
             }
@@ -335,19 +343,11 @@ class PhysicsEngine {
                     const dist = Math.sqrt(dx * dx + dy * dy);
                     if (dist < effect.radius) {
                         player.friction = effect.friction;
+                        // 冰霜地带：大幅降低地面摩擦力，让玩家滑得更远
+                        player.groundFriction = effect.friction;
                     } else {
                         player.friction = PLAYER_CONFIG.FRICTION;
-                    }
-                });
-            } else if (effect.type === 'airFrictionZone') {
-                this.players.forEach(player => {
-                    const dx = effect.x - player.position.x;
-                    const dy = effect.y - player.position.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist < effect.radius) {
-                        player.frictionAir = effect.airFriction;
-                    } else {
-                        player.frictionAir = PLAYER_CONFIG.AIR_FRICTION;
+                        player.groundFriction = PLAYER_CONFIG.GROUND_FRICTION;
                     }
                 });
             } else if (effect.type === 'dampingField') {
@@ -380,6 +380,7 @@ class PhysicsEngine {
     }
 
     addEffect(effect) {
+        effect._createdRound = this.currentRound;
         this.effects.push(effect);
     }
 
@@ -412,11 +413,6 @@ class PhysicsEngine {
             Matter.World.remove(this.world, this.rigidConstraint);
             this.rigidConstraint = null;
         }
-        // 移除软绳约束
-        if (this.softRopeConstraint) {
-            Matter.World.remove(this.world, this.softRopeConstraint);
-            this.softRopeConstraint = null;
-        }
         this.softRopeOriginalLength = 0;
         this.isSoftRopeLocked = false;
         // 移除玩家
@@ -424,5 +420,6 @@ class PhysicsEngine {
         this.players = [];
         this.effects = [];
         this.tempEffects = [];
+        this.currentRound = 1;
     }
 }

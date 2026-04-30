@@ -16,7 +16,8 @@ const PLAYER_CONFIG = {
     HEIGHT: 40,
     MAX_VELOCITY: 15,
     FRICTION: 4.5,
-    AIR_FRICTION: 0.05,
+    AIR_FRICTION: 0, // 无空气阻力，改为地面摩擦力
+    GROUND_FRICTION: 0.10, // 地面摩擦系数，每帧减速比例
     RESTITUTION: 0.3
 };
 

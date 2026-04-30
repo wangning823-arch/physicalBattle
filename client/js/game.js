@@ -230,19 +230,6 @@ class Game {
                 }
                 break;
 
-            case 'vacuum_zone':
-                if (aimTarget) {
-                    this.physics.addEffect({
-                        type: 'airFrictionZone',
-                        x: aimTarget.x,
-                        y: aimTarget.y,
-                        radius: card.effect.radius,
-                        airFriction: card.effect.airFriction,
-                        duration: card.effect.duration,
-                        _seed: Date.now() + 4444
-                    });
-                }
-                break;
             case 'mass_increase':
             case 'mass_decrease':
                 if (selfPlayer && selfPhysics) {
@@ -666,11 +653,11 @@ class Game {
         if (!player.effects || player.effects.length === 0) return;
 
         // 效果过期规则：从使用的那一刻起，持续 N 个该玩家自己的回合
-        // 例如 duration=1：在该玩家第 turnsPlayed=k 时使用，到第 turnsPlayed=k+1 的弃牌阶段仍然有效，出牌结束后到 k+2 才过期
-        // 即 duration=N 表示效果在该玩家后续 N 次出牌时仍然有效
+        // 例如 duration=1：在该玩家第 turnsPlayed=k 时使用，到第 turnsPlayed=k+1 的弃牌阶段就过期
+        // 即从出牌到再到自己时算一轮，效果结束
         player.effects = player.effects.filter(effect => {
             const elapsed = player.turnsPlayed - effect.startTurn;
-            if (elapsed > effect.remainingTurns) {
+            if (elapsed >= effect.remainingTurns) {
                 // 效果过期，执行清理
                 if (effect.type === 'massChange' && player.originalMass) {
                     this.physics.setPlayerMass(player.id, player.originalMass);

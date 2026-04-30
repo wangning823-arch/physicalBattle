@@ -29,7 +29,7 @@ const CARDS_DATABASE = [
         icon: '🌀',
         description: '在指定位置放置引力源，持续2回合',
         formula: 'F = G·M/r²',
-        effect: { duration: 2, radius: 150, strength: 200, needsAim: true, placeAnywhere: true },
+        effect: { duration: 2, radius: 150, strength: 400, needsAim: true, placeAnywhere: true },
         rarity: 'rare'
     },
     {
@@ -98,17 +98,6 @@ const CARDS_DATABASE = [
         effect: { duration: 1, anchored: true },
         rarity: 'rare'
     },
-            {
-                id: 'vacuum_zone',
-                name: '真空区域',
-                type: CARD_TYPES.TERRAIN,
-                cost: 1,
-                icon: '🌫️',
-                description: '区域空气阻力降为0，滑行更远，持续1回合',
-                formula: 'F_drag = 0',
-                effect: { duration: 1, airFriction: 0, radius: 100, needsAim: true, placeAnywhere: true },
-                rarity: 'common'
-            },
     {
         id: 'rigid_connection',
         name: '刚性连接',
