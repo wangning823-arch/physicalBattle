@@ -13,7 +13,6 @@ class PhysicsEngine {
         this.softRopeOriginalLength = 0; // 软绳原长
         this.isSoftRopeLocked = false; // 软绳是否已锁定
         this.anchoredPlayerIds = []; // 有定位锚的玩家ID列表
-        this.currentRound = 1; // 当前回合数，用于效果持续时间计算
         this.createArena();
     }
 
@@ -26,10 +25,9 @@ class PhysicsEngine {
      * 更新效果的剩余回合数（每回合调用一次）
      */
     updateEffectsTurn() {
-        // 只减少非当前回合创建的效果的 duration
-        // 这样确保当回合创建的效果至少存活到下一个回合
+        // 每个玩家出牌结束时调用，减少所有效果的 duration
         this.effects.forEach(effect => {
-            if (effect.duration > 0 && effect._createdRound !== this.currentRound) {
+            if (effect.duration > 0) {
                 effect.duration--;
             }
         });
@@ -70,9 +68,6 @@ class PhysicsEngine {
             this.softRopeOriginalLength = 0;
             this.isSoftRopeLocked = false;
         }
-
-        // 回合结束，推进回合计数
-        this.currentRound++;
     }
 
     /**
@@ -362,8 +357,8 @@ class PhysicsEngine {
                     if (dist < effect.radius) {
                         // 每帧减少一定比例的速度
                         Matter.Body.setVelocity(player, {
-                            x: player.velocity.x * 0.9,
-                            y: player.velocity.y * 0.9
+                            x: player.velocity.x * 0.92,
+                            y: player.velocity.y * 0.92
                         });
                     }
                 });
@@ -380,7 +375,6 @@ class PhysicsEngine {
     }
 
     addEffect(effect) {
-        effect._createdRound = this.currentRound;
         this.effects.push(effect);
     }
 
@@ -420,6 +414,5 @@ class PhysicsEngine {
         this.players = [];
         this.effects = [];
         this.tempEffects = [];
-        this.currentRound = 1;
     }
 }

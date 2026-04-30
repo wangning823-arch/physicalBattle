@@ -446,6 +446,35 @@ class Game {
                     });
                 }
                 break;
+            case 'mass_energy':
+                // 质能方程：质量降低50%，获得2点能量（可超上限）
+                if (selfPlayer && selfPhysics) {
+                    const currentMass = this.physics.getPlayer(playerId)?.mass || PLAYER_CONFIG.MASS;
+                    const originalMass = selfPlayer.originalMass || PLAYER_CONFIG.MASS;
+                    if (!selfPlayer.originalMass) selfPlayer.originalMass = originalMass;
+                    const newMass = originalMass * card.effect.massMultiplier;
+                    this.physics.setPlayerMass(playerId, newMass);
+                    // 能量超过上限也保留
+                    selfPlayer.energy += card.effect.energyGain;
+                    selfPlayer.effects.push({
+                        type: 'massChange',
+                        multiplier: card.effect.massMultiplier,
+                        remainingTurns: card.effect.duration,
+                        originalMass: originalMass,
+                        startTurn: selfPlayer.turnsPlayed
+                    });
+                    // 特效
+                    this.physics.addTempEffect({
+                        type: 'mass_change',
+                        x: selfPhysics.position.x,
+                        y: selfPhysics.position.y,
+                        massMultiplier: card.effect.massMultiplier,
+                        life: 600,
+                        maxLife: 600,
+                        _seed: Date.now() + 7777
+                    });
+                }
+                break;
             case 'quantum_superposition':
                 // 进入量子叠加态
                 console.log('=== 使用量子叠加卡牌 ===');
@@ -504,6 +533,9 @@ class Game {
                 // 玩家一出牌结束，轮到玩家二
                 this.currentPlayerIndex = 1;
                 this.turnPhase = 'discard';
+
+                // 玩家一出完，减少持久效果持续时间
+                this.physics.updateEffectsTurn();
 
                 // 检查玩家2是否需要在对手回合结束时坍缩
                 const player2 = this.players[1];

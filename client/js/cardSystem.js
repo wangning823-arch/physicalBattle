@@ -15,7 +15,7 @@ const CARDS_DATABASE = [
         name: '定向冲刺',
         type: CARD_TYPES.MOVEMENT,
         cost: 1,
-        icon: '💨',
+        icon: '🏃',
         description: '向指定方向冲刺',
         formula: 'v = v₀ + at',
         effect: { impulse: 200, needsAim: true },
@@ -26,10 +26,10 @@ const CARDS_DATABASE = [
         name: '引力陷阱',
         type: CARD_TYPES.TERRAIN,
         cost: 2,
-        icon: '🌀',
+        icon: '🕳️',
         description: '在指定位置放置引力源，持续2回合',
         formula: 'F = G·M/r²',
-        effect: { duration: 2, radius: 150, strength: 400, needsAim: true, placeAnywhere: true },
+        effect: { duration: 4, radius: 150, strength: 400, needsAim: true, placeAnywhere: true },
         rarity: 'rare'
     },
     {
@@ -37,10 +37,10 @@ const CARDS_DATABASE = [
         name: '排斥力场',
         type: CARD_TYPES.DEFENSE,
         cost: 2,
-        icon: '🔄',
+        icon: '💫',
         description: '自身周围产生持续排斥力，持续2回合',
         formula: 'F ∝ 1/r²',
-        effect: { duration: 2, radius: 120, strength: 600 },
+        effect: { duration: 4, radius: 120, strength: 600 },
         rarity: 'rare'
     },
             {
@@ -51,7 +51,7 @@ const CARDS_DATABASE = [
                 icon: '🧊',
                 description: '指定区域摩擦系数大幅降低，持续1回合',
                 formula: 'μ → 0.03',
-                effect: { duration: 1, friction: 0.03, radius: 80, needsAim: true, placeAnywhere: true },
+                effect: { duration: 2, friction: 0.03, radius: 80, needsAim: true, placeAnywhere: true },
                 rarity: 'common'
             },
             {
@@ -59,7 +59,7 @@ const CARDS_DATABASE = [
                 name: '惯性增强',
                 type: CARD_TYPES.UTILITY,
                 cost: 1,
-                icon: '🏋️',
+                icon: '⬛',
                 description: '自身质量变为3倍，持续2回合',
                 formula: 'F = ma',
                 effect: { multiplier: 3, duration: 2 },
@@ -70,7 +70,7 @@ const CARDS_DATABASE = [
                 name: '惯性减弱',
                 type: CARD_TYPES.UTILITY,
                 cost: 1,
-                icon: '🪶',
+                icon: '🔲',
                 description: '自身质量变为0.3倍，持续2回合',
                 formula: 'a = F/m',
                 effect: { multiplier: 0.3, duration: 2 },
@@ -81,7 +81,7 @@ const CARDS_DATABASE = [
         name: '爆裂冲击',
         type: CARD_TYPES.ATTACK,
         cost: 3,
-        icon: '💣',
+        icon: '☄️',
         description: '强力冲量攻击，将敌人推远',
         formula: 'E = ½mv²',
         effect: { impulse: 350, needsAim: true, targetEnemy: true },
@@ -103,10 +103,10 @@ const CARDS_DATABASE = [
         name: '刚性连接',
         type: CARD_TYPES.UTILITY,
         cost: 2,
-        icon: '🔗',
+        icon: '⛓️',
         description: '将你与对手刚性连接，距离保持不变，持续2回合',
         formula: 'd = const',
-        effect: { duration: 2, type: 'rigid_constraint' },
+        effect: { duration: 4, type: 'rigid_constraint' },
         rarity: 'rare'
     },
     {
@@ -117,7 +117,7 @@ const CARDS_DATABASE = [
         icon: '🪢',
         description: '用软绳连接你与对手，距离可自由变化但超过原长时立即锁定，持续3回合',
         formula: 'F = 0 (d ≤ d₀); d = d₀ (d > d₀)',
-        effect: { duration: 3, type: 'soft_rope' },
+        effect: { duration: 6, type: 'soft_rope' },
         rarity: 'rare'
     },
     {
@@ -125,10 +125,10 @@ const CARDS_DATABASE = [
         name: '阻尼领域',
         type: CARD_TYPES.DEFENSE,
         cost: 2,
-        icon: '🛡️',
+        icon: '🫧',
         description: '在指定位置放置阻尼领域，区域内运动快速衰减，持续2回合',
         formula: "v' = v·e^(-γt)",
-        effect: { duration: 2, radius: 120, type: 'dampingField', needsAim: true, placeAnywhere: true },
+        effect: { duration: 4, radius: 80, type: 'dampingField', needsAim: true, placeAnywhere: true },
         rarity: 'rare'
     },
     {
@@ -136,7 +136,7 @@ const CARDS_DATABASE = [
         name: '正电荷附着',
         type: CARD_TYPES.ATTACK,
         cost: 1,
-        icon: '⚛️',
+        icon: '🧲',
         description: '给敌人附着一个正电荷，持续2回合',
         formula: 'F = k·q₁·q₂/r²',
         effect: { duration: 2, charge: 1, needsAim: false, targetEnemy: true },
@@ -147,7 +147,7 @@ const CARDS_DATABASE = [
         name: '负电荷附着',
         type: CARD_TYPES.ATTACK,
         cost: 1,
-        icon: '⚫',
+        icon: '🪩',
         description: '给敌人附着一个负电荷，持续2回合',
         formula: 'F = k·q₁·q₂/r²',
         effect: { duration: 2, charge: -1, needsAim: false, targetEnemy: true },
@@ -191,11 +191,22 @@ const CARDS_DATABASE = [
         name: '热机',
         type: CARD_TYPES.UTILITY,
         cost: 4,
-        icon: '⚙️🔥',
+        icon: '🔥',
         description: '召唤热机附身，2回合内可充能3点触发3倍动量冲击的强力冲量，被冰冻则能量归零',
         formula: 'W = Q·η',
         effect: { heatEngine: true, duration: 2, maxCharge: 3, impulseMultiplier: 3 },
         rarity: 'epic'
+    },
+    {
+        id: 'mass_energy',
+        name: '质能方程',
+        type: CARD_TYPES.UTILITY,
+        cost: 0,
+        icon: '✨',
+        description: '质量转化为能量：质量降低50%持续2轮，立即获得2点能量（可超过上限）',
+        formula: 'E = mc²',
+        effect: { duration: 2, massMultiplier: 0.5, energyGain: 2 },
+        rarity: 'rare'
     }
 ];
 
