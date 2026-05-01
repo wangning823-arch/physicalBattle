@@ -1743,8 +1743,8 @@ class Renderer {
             this.drawAimingLine(currentPlayerPhysics, aimingTarget, gameState);
         }
 
-        if (playersToDraw && playersToDraw[0]) {
-            this.drawFallWarning(playersToDraw[0], gameState.arenaRadius);
+        if (playersToDraw) {
+            playersToDraw.forEach(p => this.drawFallWarning(p, gameState.arenaRadius));
         }
 
         // End screen shake

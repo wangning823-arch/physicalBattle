@@ -7,7 +7,7 @@ const CARDS_DATABASE = [
         icon: '💥',
         description: '向指定方向对敌人施加冲量',
         formula: 'J = Δp = m·Δv',
-        effect: { impulse: 180, needsAim: true, targetEnemy: true },
+        effect: { impulse: 375, needsAim: true, targetEnemy: true },
         rarity: 'common'
     },
     {
@@ -84,7 +84,7 @@ const CARDS_DATABASE = [
         icon: '☄️',
         description: '强力冲量攻击，将敌人推远',
         formula: 'E = ½mv²',
-        effect: { impulse: 350, needsAim: true, targetEnemy: true },
+        effect: { impulse: 500, needsAim: true, targetEnemy: true },
         rarity: 'epic'
     },
     {

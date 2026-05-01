@@ -680,7 +680,7 @@ class Game {
             const dy = targetPhysics.position.y - selfPhysics.position.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist > 0) {
-                const impulse = 180 * heatEngine.impulseMultiplier; // 3×动量冲击
+                const impulse = 375 * heatEngine.impulseMultiplier; // 3×动量冲击
                 const impulseX = (dx / dist) * impulse;
                 const impulseY = (dy / dist) * impulse;
                 this.physics.applyImpulse(targetId, impulseX, impulseY);
@@ -723,7 +723,7 @@ class Game {
                 const dy = targetPhysics.position.y - selfPhysics.position.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist > 0) {
-                    const impulse = 180 * heatEngine.impulseMultiplier; // 3×动量冲击
+                    const impulse = 375 * heatEngine.impulseMultiplier; // 3×动量冲击
                     const impulseX = (dx / dist) * impulse;
                     const impulseY = (dy / dist) * impulse;
                     this.physics.applyImpulse(targetId, impulseX, impulseY);
