@@ -249,15 +249,15 @@ class Game {
             case 'mass_decrease':
                 if (selfPlayer && selfPhysics) {
                     const currentMass = this.physics.getPlayer(playerId)?.mass || PLAYER_CONFIG.MASS;
-                    const originalMass = selfPlayer.originalMass || PLAYER_CONFIG.MASS;
-                    if (!selfPlayer.originalMass) selfPlayer.originalMass = originalMass;
-                    const newMass = originalMass * card.effect.multiplier;
+                    if (!selfPlayer.originalMass) selfPlayer.originalMass = PLAYER_CONFIG.MASS;
+                    // 基于当前质量计算，可叠加
+                    const newMass = currentMass * card.effect.multiplier;
                     this.physics.setPlayerMass(playerId, newMass);
                     selfPlayer.effects.push({
                         type: 'massChange',
                         multiplier: card.effect.multiplier,
                         remainingTurns: card.effect.duration,
-                        originalMass: originalMass,
+                        currentMass: newMass,
                         startTurn: selfPlayer.turnsPlayed
                     });
                     // 质量变化特效
@@ -706,10 +706,6 @@ class Game {
             const elapsed = player.turnsPlayed - effect.startTurn;
             if (elapsed >= effect.remainingTurns) {
                 // 效果过期，执行清理
-                if (effect.type === 'massChange' && player.originalMass) {
-                    this.physics.setPlayerMass(player.id, player.originalMass);
-                    player.originalMass = null;
-                }
                 if (effect.type === 'anchor') {
                     player.anchorPosition = null;
                     const physics = this.physics.getPlayer(player.id);
@@ -723,6 +719,13 @@ class Game {
             }
             return true;
         });
+
+        // 检查是否还有质量变化效果，没有则恢复原始质量
+        const hasMassEffect = player.effects.some(e => e.type === 'massChange');
+        if (!hasMassEffect && player.originalMass) {
+            this.physics.setPlayerMass(player.id, player.originalMass);
+            player.originalMass = null;
+        }
     }
 
     // 给两位玩家都发新牌（仅当大回合结束后的新回合）

@@ -18,7 +18,7 @@ const CARDS_DATABASE = [
         icon: '🏃',
         description: '向指定方向冲刺',
         formula: 'v = v₀ + at',
-        effect: { impulse: 200, needsAim: true },
+        effect: { impulse: 250, needsAim: true },
         rarity: 'common'
     },
     {

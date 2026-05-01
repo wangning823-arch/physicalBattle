@@ -142,6 +142,7 @@ const GameUI = {
         this.updateEnergyBars();
         this.updateHand();
         this.updateTurnIndicator();
+        this.updatePlayerEffects();
         this.updatePhysicsParamsPanel();
         this.updateCardParamsPanel();
         
@@ -160,35 +161,39 @@ const GameUI = {
     updatePhysicsParamsPanel() {
         const state = this.game.getState();
         if (!state.physicsPlayers) return;
-        
+
         state.physicsPlayers.forEach((player) => {
             const prefix = `p${player.playerId}`;
-            
+
             const posEl = document.getElementById(`${prefix}-position`);
             if (posEl) {
                 posEl.textContent = `(${player.position.x.toFixed(1)}, ${player.position.y.toFixed(1)})`;
+                posEl.className = 'param-value position';
             }
-            
+
             const velEl = document.getElementById(`${prefix}-velocity`);
             if (velEl) {
                 velEl.textContent = `(${player.velocity.x.toFixed(1)}, ${player.velocity.y.toFixed(1)})`;
+                velEl.className = 'param-value velocity';
             }
-            
+
             const massEl = document.getElementById(`${prefix}-mass`);
             if (massEl) {
                 massEl.textContent = `${player.mass.toFixed(1)} kg`;
+                massEl.className = 'param-value mass';
             }
-            
+
             const distEl = document.getElementById(`${prefix}-distance`);
             if (distEl) {
                 const distance = Math.sqrt(player.position.x ** 2 + player.position.y ** 2);
                 distEl.textContent = distance.toFixed(1);
+                distEl.className = 'param-value distance';
             }
         });
-        
+
         // 更新热机显示
         this.updateHeatEngineDisplay();
-        
+
         this.updateArenaParamsPanel();
     },
     
@@ -404,20 +409,26 @@ const GameUI = {
     updateCardParamsPanel() {
         const state = this.game.getState();
         const card = state.lastPlayedCard;
-        
+
         const nameEl = document.getElementById('current-card-name');
         const typeEl = document.getElementById('current-card-type');
         const formulaEl = document.getElementById('current-card-formula');
         const effectEl = document.getElementById('current-card-effect');
-        
+
         if (card) {
             if (nameEl) nameEl.textContent = card.icon + ' ' + card.name;
-            if (typeEl) typeEl.textContent = this.getCardTypeName(card.type);
+            if (typeEl) {
+                typeEl.textContent = this.getCardTypeName(card.type);
+                typeEl.dataset.type = card.type;
+            }
             if (formulaEl) formulaEl.textContent = card.formula || '-';
             if (effectEl) effectEl.textContent = card.description;
         } else {
             if (nameEl) nameEl.textContent = '-';
-            if (typeEl) typeEl.textContent = '-';
+            if (typeEl) {
+                typeEl.textContent = '-';
+                typeEl.dataset.type = '';
+            }
             if (formulaEl) formulaEl.textContent = '-';
             if (effectEl) effectEl.textContent = '请使用卡片查看效果';
         }
@@ -458,9 +469,12 @@ const GameUI = {
         const typeEl = document.getElementById('current-card-type');
         const formulaEl = document.getElementById('current-card-formula');
         const effectEl = document.getElementById('current-card-effect');
-        
+
         if (nameEl) nameEl.textContent = card.icon + ' ' + card.name;
-        if (typeEl) typeEl.textContent = this.getCardTypeName(card.type);
+        if (typeEl) {
+            typeEl.textContent = this.getCardTypeName(card.type);
+            typeEl.dataset.type = card.type;
+        }
         if (formulaEl) formulaEl.textContent = card.formula || '-';
         if (effectEl) effectEl.textContent = card.description;
     },
@@ -532,12 +546,18 @@ const GameUI = {
 
     updateTurnIndicator() {
         const indicator = document.getElementById('turn-indicator');
+        const phaseEl = document.getElementById('game-phase');
         const currentPlayerId = this.game.players[this.game.currentPlayerIndex]?.id;
-        const phaseText = this.game.turnPhase === 'discard' ? '弃牌' : '出牌';
+        const phaseText = this.game.turnPhase === 'discard' ? '弃牌阶段' : '出牌阶段';
+
         if (indicator) {
-            indicator.textContent = `第 ${this.game.currentTurn} 回合 - 玩家 ${currentPlayerId} ${phaseText}`;
+            indicator.textContent = this.game.currentTurn;
         }
-        
+        if (phaseEl) {
+            phaseEl.textContent = `玩家 ${currentPlayerId} - ${phaseText}`;
+            phaseEl.classList.toggle('active', this.game.turnPhase === 'play');
+        }
+
         this.game.players.forEach((player, index) => {
             const statusEl = document.getElementById(`player${index + 1}-status`);
             if (statusEl) {
@@ -546,6 +566,51 @@ const GameUI = {
                 } else {
                     statusEl.classList.remove('current-turn');
                 }
+            }
+        });
+    },
+
+    updatePlayerEffects() {
+        this.game.players.forEach((player, index) => {
+            const effectsEl = document.getElementById(`player${index + 1}-effects`);
+            if (!effectsEl) return;
+
+            let badges = '';
+
+            // 质量效果
+            if (player.effects) {
+                const massEffect = player.effects.find(e => e.type === 'massChange');
+                if (massEffect) {
+                    const isHeavy = massEffect.multiplier > 1;
+                    badges += `<span class="effect-badge ${isHeavy ? 'mass-up' : 'mass-down'}">${isHeavy ? '▲' : '▼'} ${massEffect.multiplier}x</span>`;
+                }
+
+                // 定位锚
+                const anchorEffect = player.effects.find(e => e.type === 'anchor');
+                if (anchorEffect) {
+                    badges += `<span class="effect-badge anchor">⚓ 锚定</span>`;
+                }
+            }
+
+            // 护盾
+            if (this.game.shields && this.game.shields[player.id]) {
+                badges += `<span class="effect-badge shield">🛡️ 护盾</span>`;
+            }
+
+            // 电荷
+            if (player.charge !== 0) {
+                const isPos = player.charge > 0;
+                badges += `<span class="effect-badge ${isPos ? 'charge-pos' : 'charge-neg'}">${isPos ? '+' : ''}${player.charge} ⚡</span>`;
+            }
+
+            effectsEl.innerHTML = badges;
+
+            // 更新质量显示
+            const massEl = document.getElementById(`p${index + 1}-mass-hud`);
+            if (massEl) {
+                const physicsPlayer = this.game.physics.getPlayer(player.id);
+                const mass = physicsPlayer ? Math.round(physicsPlayer.mass) : 70;
+                massEl.textContent = `${mass} kg`;
             }
         });
     },

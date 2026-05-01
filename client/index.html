@@ -9,23 +9,45 @@
 <body>
     <div id="game-container">
         <div id="hud-top">
-            <div id="player1-status" class="player-status">
-                <span class="player-name">玩家 1</span>
+            <div id="player1-status" class="player-status player1">
+                <div class="player-header">
+                    <div class="player-avatar p1-avatar">P1</div>
+                    <div class="player-info">
+                        <span class="player-name">玩家 1</span>
+                        <span class="player-mass" id="p1-mass-hud">70 kg</span>
+                    </div>
+                </div>
                 <div class="energy-bar">
                     <div class="energy-fill" style="width: 100%"></div>
+                    <div class="energy-segments"></div>
                 </div>
                 <span class="energy-text">10 / 10</span>
+                <div id="player1-effects" class="player-effects"></div>
                 <div id="player1-heat-engine" class="heat-engine-display"></div>
             </div>
+
             <div id="game-info">
-                <span id="turn-indicator">回合 1</span>
+                <div class="turn-badge">
+                    <span class="turn-label">ROUND</span>
+                    <span id="turn-indicator" class="turn-number">1</span>
+                </div>
+                <div id="game-phase" class="phase-indicator">准备中</div>
             </div>
-            <div id="player2-status" class="player-status">
-                <span class="player-name">玩家 2</span>
+
+            <div id="player2-status" class="player-status player2">
+                <div class="player-header">
+                    <div class="player-avatar p2-avatar">P2</div>
+                    <div class="player-info">
+                        <span class="player-name">玩家 2</span>
+                        <span class="player-mass" id="p2-mass-hud">70 kg</span>
+                    </div>
+                </div>
                 <div class="energy-bar">
                     <div class="energy-fill" style="width: 100%"></div>
+                    <div class="energy-segments"></div>
                 </div>
                 <span class="energy-text">10 / 10</span>
+                <div id="player2-effects" class="player-effects"></div>
                 <div id="player2-heat-engine" class="heat-engine-display"></div>
             </div>
         </div>
