@@ -13,12 +13,67 @@ class PhysicsEngine {
         this.softRopeOriginalLength = 0; // 软绳原长
         this.isSoftRopeLocked = false; // 软绳是否已锁定
         this.anchoredPlayerIds = []; // 有定位锚的玩家ID列表
+        this.projectiles = []; // 电磁炮炮弹
+        this._setupProjectileCollisions();
         this.createArena();
     }
 
     // 检查玩家是否有定位锚
     isPlayerAnchored(playerId) {
         return this.anchoredPlayerIds.indexOf(playerId) !== -1;
+    }
+
+    _setupProjectileCollisions() {
+        Matter.Events.on(this.engine, 'collisionStart', (event) => {
+            for (const pair of event.pairs) {
+                const { bodyA, bodyB } = pair;
+                let projectile = null;
+                let player = null;
+
+                if (bodyA.label === 'projectile' && bodyB.playerId) {
+                    projectile = bodyA;
+                    player = bodyB;
+                } else if (bodyB.label === 'projectile' && bodyA.playerId) {
+                    projectile = bodyB;
+                    player = bodyA;
+                }
+
+                if (projectile && player) {
+                    // 找到对应的炮弹数据
+                    const projIndex = this.projectiles.findIndex(p => p.body === projectile);
+                    if (projIndex === -1) continue;
+                    const projData = this.projectiles[projIndex];
+
+                    // 跳过发射者（保护期10帧）
+                    if (projData.graceFrames <= 10) continue;
+
+                    // 非弹性碰撞：炮弹动量完全转移给玩家
+                    const vel = projectile.velocity;
+                    const momentum = projectile.mass * Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+                    const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+                    if (speed > 0) {
+                        this.applyImpulse(player.playerId,
+                            (vel.x / speed) * momentum,
+                            (vel.y / speed) * momentum
+                        );
+                    }
+
+                    // 命中特效
+                    const pos = projectile.position;
+                    this.addTempEffect({
+                        type: 'momentum_blast',
+                        x: pos.x,
+                        y: pos.y,
+                        life: 700,
+                        maxLife: 700,
+                        _seed: Date.now() + 99999
+                    });
+
+                    // 移除炮弹
+                    this.removeProjectile(projIndex);
+                }
+            }
+        });
     }
 
     /**
@@ -140,7 +195,7 @@ class PhysicsEngine {
             inertia: Infinity,
             collisionFilter: {
                 category: 0x0001,
-                mask: 0x0001 // 让玩家可以互相碰撞
+                mask: 0x0005 // 玩家之间碰撞(0x0001) + 与炮弹碰撞(0x0004)
             }
         });
         player.playerId = playerId;
@@ -241,6 +296,21 @@ class PhysicsEngine {
             } else {
                 // 速度很小时直接停止
                 Matter.Body.setVelocity(player, { x: 0, y: 0 });
+            }
+        }
+
+        // ========== 更新炮弹 ==========
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+            const proj = this.projectiles[i];
+            proj.life--;
+            proj.graceFrames = (proj.graceFrames || 0) + 1;
+
+            // 检查是否飞出场外或超时
+            const pos = proj.body.position;
+            const dist = Math.sqrt(pos.x * pos.x + pos.y * pos.y);
+            if (dist > this.arenaRadius || proj.life <= 0) {
+                this.removeProjectile(i);
+                continue;
             }
         }
 
@@ -393,6 +463,12 @@ class PhysicsEngine {
         return false;
     }
 
+    removeProjectile(index) {
+        const proj = this.projectiles[index];
+        Matter.Composite.remove(this.engine.world, proj.body);
+        this.projectiles.splice(index, 1);
+    }
+
     getPlayer(playerId) {
         return this.players.find(p => p.playerId === playerId);
     }
@@ -414,5 +490,8 @@ class PhysicsEngine {
         this.players = [];
         this.effects = [];
         this.tempEffects = [];
+        // 清除炮弹
+        this.projectiles.forEach(p => Matter.Composite.remove(this.engine.world, p.body));
+        this.projectiles = [];
     }
 }

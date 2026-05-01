@@ -514,10 +514,11 @@ class Renderer {
 
             ctx.save();
 
-            // 背景面板
+            // 背景面板（宽度根据最大充能数自动计算，左侧留出火焰图标空间）
             ctx.globalAlpha = 0.7;
             ctx.fillStyle = '#1a0a00';
-            const bx = -30, by = yOff - 12, bw = 60, bh = 24, br = 6;
+            const bw = (he.maxCharge - 1) * 12 + 30;
+            const bx = -bw / 2, by = yOff - 12, bh = 24, br = 6;
             ctx.beginPath();
             ctx.moveTo(bx + br, by);
             ctx.lineTo(bx + bw - br, by);
@@ -535,16 +536,16 @@ class Renderer {
             ctx.globalAlpha = isFull ? 0.9 : 0.6;
             ctx.stroke();
 
-            // 火焰图标
+            // 火焰图标（显示在进度条左侧）
             ctx.globalAlpha = 1;
             ctx.font = '14px sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText('🔥', -18, yOff);
+            ctx.fillText('🔥', -(he.maxCharge - 1) * 6 - 12, yOff);
 
             // 充能格子
             for (let i = 0; i < he.maxCharge; i++) {
-                const px = -4 + i * 12;
+                const px = -(he.maxCharge - 1) * 6 + i * 12;
                 const filled = i < he.charge;
                 ctx.beginPath();
                 ctx.arc(px, yOff, 4, 0, Math.PI * 2);
@@ -1737,6 +1738,43 @@ class Renderer {
 
         if (gameState.tempEffects) {
             this.drawTempEffects(gameState.tempEffects);
+        }
+
+        // 渲染电磁炮炮弹
+        if (gameState.projectiles) {
+            const ctx2 = this.ctx;
+            gameState.projectiles.forEach(proj => {
+                const x = this.centerX + proj.body.position.x;
+                const y = this.centerY + proj.body.position.y;
+                const alpha = proj.life / proj.maxLife;
+
+                // 拖尾（3个渐隐圆点）
+                const vel = proj.body.velocity;
+                for (let i = 3; i >= 1; i--) {
+                    const tx = x - vel.x * i * 2;
+                    const ty = y - vel.y * i * 2;
+                    ctx2.beginPath();
+                    ctx2.arc(tx, ty, 4 - i, 0, Math.PI * 2);
+                    ctx2.fillStyle = `rgba(255,255,255,${alpha * (0.3 - i * 0.08)})`;
+                    ctx2.fill();
+                }
+
+                // 电荷光效
+                const chargeColor = proj.charge > 0 ? '255,200,0' : '0,150,255';
+                ctx2.beginPath();
+                ctx2.arc(x, y, 12, 0, Math.PI * 2);
+                ctx2.fillStyle = `rgba(${chargeColor},${alpha * 0.25})`;
+                ctx2.fill();
+
+                // 炮弹本体
+                ctx2.beginPath();
+                ctx2.arc(x, y, 6, 0, Math.PI * 2);
+                ctx2.fillStyle = `rgba(255,255,255,${alpha})`;
+                ctx2.fill();
+                ctx2.strokeStyle = `rgba(${chargeColor},${alpha * 0.8})`;
+                ctx2.lineWidth = 2;
+                ctx2.stroke();
+            });
         }
 
         if (aimingTarget && currentPlayerPhysics) {

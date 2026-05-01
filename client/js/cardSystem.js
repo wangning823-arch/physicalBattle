@@ -192,9 +192,9 @@ const CARDS_DATABASE = [
         type: CARD_TYPES.UTILITY,
         cost: 4,
         icon: '🔥',
-        description: '召唤热机附身，2回合内可充能3点触发3倍动量冲击的强力冲量，被冰冻则能量归零',
+        description: '召唤热机附身，2回合内可充能（最多6点），充几点就造成几倍动量冲击，被冰冻则能量归零',
         formula: 'W = Q·η',
-        effect: { heatEngine: true, duration: 2, maxCharge: 3, impulseMultiplier: 3 },
+        effect: { heatEngine: true, duration: 2, maxCharge: 6, impulseMultiplier: 1 },
         rarity: 'epic'
     },
     {
@@ -229,6 +229,17 @@ const CARDS_DATABASE = [
         formula: '⟨x²⟩ = 2Dt',
         effect: { impulse: 500 },
         rarity: 'common'
+    },
+    {
+        id: 'electromagnetic_cannon',
+        name: '电磁炮',
+        type: CARD_TYPES.ATTACK,
+        cost: 3,
+        icon: '🔫',
+        description: '消耗自身10%质量发射带电炮弹，速度与电荷量成正比，命中造成750冲量',
+        formula: 'F = qvB, a = F/m',
+        effect: { needsAim: true, targetEnemy: true, massRatio: 0.1, speedPerCharge: 100, baseImpulse: 750 },
+        rarity: 'epic'
     }
 ];
 
@@ -245,16 +256,18 @@ class CardSystem {
         for (let i = 0; i < 3; i++) {
             this.deck.push(...CARDS_DATABASE);
         }
-        // 动量冲击添加额外副本，提高30%抽中概率
+        // 动量冲击添加额外副本（12→15张）
         const momentumBlast = CARDS_DATABASE.find(c => c.id === 'momentum_blast');
-        this.deck.push(momentumBlast);
+        for (let i = 0; i < 3; i++) {
+            this.deck.push(momentumBlast);
+        }
         
-        // 定位锚减少副本，降低30%抽中概率
-        const anchorCard = CARDS_DATABASE.find(c => c.id === 'anchor');
-        for (let i = this.deck.length - 1; i >= 0; i--) {
+        // 定位锚减少副本（12→8张）
+        let anchorRemoved = 0;
+        for (let i = this.deck.length - 1; i >= 0 && anchorRemoved < 4; i--) {
             if (this.deck[i].id === 'anchor') {
                 this.deck.splice(i, 1);
-                break;
+                anchorRemoved++;
             }
         }
         
@@ -315,6 +328,24 @@ class CardSystem {
             const brownianMotionCard = CARDS_DATABASE.find(c => c.id === 'brownian_motion');
             for (let i = brownianMotionCount; i < 8; i++) {
                 this.deck.push(brownianMotionCard);
+            }
+        }
+
+        // 爆裂冲击减少副本（12→10张）
+        let explosiveRemoved = 0;
+        for (let i = this.deck.length - 1; i >= 0 && explosiveRemoved < 2; i--) {
+            if (this.deck[i].id === 'explosive_charge') {
+                this.deck.splice(i, 1);
+                explosiveRemoved++;
+            }
+        }
+
+        // 电磁炮卡牌数量适中（史诗卡，4张）
+        const emCannonCount = this.deck.filter(c => c.id === 'electromagnetic_cannon').length;
+        if (emCannonCount < 4) {
+            const emCannonCard = CARDS_DATABASE.find(c => c.id === 'electromagnetic_cannon');
+            for (let i = emCannonCount; i < 4; i++) {
+                this.deck.push(emCannonCard);
             }
         }
         

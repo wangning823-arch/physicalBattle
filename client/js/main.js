@@ -211,8 +211,8 @@ const GameUI = {
                 const canCharge = isCurrentPlayer && 
                                   player.energy >= 1 && 
                                   player.heatEngine.charge < player.heatEngine.maxCharge;
-                const canFire = isCurrentPlayer && 
-                                player.heatEngine.charge >= player.heatEngine.maxCharge;
+                const canFire = isCurrentPlayer &&
+                                player.heatEngine.charge >= 1;
                 
                 // 检查是否需要创建新的热机容器，或者只更新现有内容
                 let container = displayEl.querySelector('.heat-engine-container');
@@ -530,7 +530,8 @@ const GameUI = {
             cardEl.dataset.type = card.type;
             cardEl.dataset.rarity = card.rarity;
             cardEl.dataset.cost = card.cost;
-            if (currentPlayer.energy < card.cost || this.game.turnPhase !== 'play') {
+            const noCharge = card.id === 'electromagnetic_cannon' && (!currentPlayer.charge || currentPlayer.charge === 0);
+            if (currentPlayer.energy < card.cost || this.game.turnPhase !== 'play' || noCharge) {
                 cardEl.classList.add('disabled');
             }
             cardEl.innerHTML = `

@@ -43,7 +43,7 @@ class Game {
         console.log('Dealing cards...');
         this.players.forEach((player, index) => {
             const drawn = this.cardSystem.draw(GAME_CONFIG.CARDS_PER_TURN);
-            player.cards = drawn;
+            player.cards = drawn.sort((a, b) => a.cost - b.cost);
             console.log(`Player ${player.id} got ${drawn.length} cards`, drawn);
         });
     }
@@ -79,7 +79,12 @@ class Game {
         
         const { card, cardIndex, playerId } = this.aimingState;
         const player = this.players.find(p => p.id === playerId);
-        
+
+        // 电磁炮：无电荷时不能使用
+        if (card.id === 'electromagnetic_cannon' && (!player.charge || player.charge === 0)) {
+            return false;
+        }
+
         // 检查目标位置是否在圆形场地内
         // 如果是领域类卡牌，还要考虑领域自身的半径
         let maxAllowedRadius = GAME_CONFIG.ARENA_RADIUS;
@@ -443,11 +448,11 @@ class Game {
                 selfPlayer.heatEngine = {
                     active: true,
                     charge: 0,
-                    maxCharge: 3,
+                    maxCharge: 6,
                     duration: 3, // 3个回合有效期：使用回合 + 2个完整回合
                     ownerTurnsRemaining: 3, // 明确跟踪属于热机拥有者的剩余回合数
                     ownerId: playerId,
-                    impulseMultiplier: 3
+                    impulseMultiplier: 1 // 现在倍数等于充能点数
                 };
                 // 添加热机特效
                 if (selfPhysics) {
@@ -557,6 +562,67 @@ class Game {
                     });
                 }
                 break;
+            case 'electromagnetic_cannon':
+                // 电磁炮：自身必须带电才能使用
+                if (selfPlayer.charge && selfPlayer.charge !== 0 && selfPhysics && aimTarget) {
+                    const charge = selfPlayer.charge;
+                    const speed = Math.abs(charge) * card.effect.speedPerCharge;
+                    const projectileMass = selfPhysics.mass * card.effect.massRatio;
+
+                    // 计算方向（从自身指向瞄准点）
+                    const dx = aimTarget.x - selfPhysics.position.x;
+                    const dy = aimTarget.y - selfPhysics.position.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist > 0) {
+                        // 创建炮弹物理体
+                        const projectile = Matter.Bodies.circle(
+                            selfPhysics.position.x, selfPhysics.position.y,
+                            6,
+                            {
+                                mass: projectileMass,
+                                frictionAir: 0,
+                                friction: 0,
+                                restitution: 0.5,
+                                collisionFilter: {
+                                    category: 0x0004,
+                                    mask: 0x0001
+                                },
+                                label: 'projectile'
+                            }
+                        );
+
+                        // 设置初始速度
+                        const vx = (dx / dist) * speed;
+                        const vy = (dy / dist) * speed;
+                        Matter.Body.setVelocity(projectile, { x: vx, y: vy });
+
+                        // 添加到世界
+                        Matter.Composite.add(this.physics.engine.world, projectile);
+
+                        // 存储炮弹信息
+                        this.physics.projectiles.push({
+                            body: projectile,
+                            charge: charge,
+                            ownerId: playerId,
+                            life: 120,
+                            maxLife: 120,
+                            baseImpulse: card.effect.baseImpulse
+                        });
+
+                        // 发射特效
+                        this.physics.addTempEffect({
+                            type: 'charge_apply',
+                            x: selfPhysics.position.x,
+                            y: selfPhysics.position.y,
+                            charge: charge,
+                            life: 300,
+                            maxLife: 300,
+                            _seed: Date.now() + 11111
+                        });
+                    }
+                }
+                break;
         }
         this.cardSystem.discard(card);
         this.checkGameOver();
@@ -663,7 +729,8 @@ class Game {
     fireHeatEngine(playerId) {
         const player = this.players.find(p => p.id === playerId);
         if (!player || !player.heatEngine || !player.heatEngine.active) return false;
-        if (player.heatEngine.charge < player.heatEngine.maxCharge) return false;
+        // 只要有充能就可以发射
+        if (player.heatEngine.charge <= 0) return false;
 
         const heatEngine = player.heatEngine;
         const selfPhysics = this.physics.getPlayer(player.id);
@@ -674,18 +741,18 @@ class Game {
         const targetPlayer = this.players.find(p => p.id === targetId);
         const hasAnchor = targetPlayer && targetPlayer.effects.some(e => e.type === 'anchor');
 
-        // 释放3倍动量冲击（只对无定位锚的目标）
+        // 释放充能点数倍的动量冲击（只对无定位锚的目标）
         if (targetPhysics && selfPhysics && !hasAnchor) {
             const dx = targetPhysics.position.x - selfPhysics.position.x;
             const dy = targetPhysics.position.y - selfPhysics.position.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist > 0) {
-                const impulse = 375 * heatEngine.impulseMultiplier; // 3×动量冲击
+                const impulse = 375 * heatEngine.charge; // 充能点数 × 基础动量
                 const impulseX = (dx / dist) * impulse;
                 const impulseY = (dy / dist) * impulse;
                 this.physics.applyImpulse(targetId, impulseX, impulseY);
 
-                // 添加热机爆发特效 - 预生成粒子
+                // 添加热机爆发特效
                 this.physics.addTempEffect({
                     type: 'heat_engine_blast',
                     x: targetPhysics.position.x,
@@ -703,7 +770,7 @@ class Game {
         return true;
     }
 
-    // 热机结算
+    // 热机结算（超时自动释放）
     settleHeatEngine(player) {
         const heatEngine = player.heatEngine;
         if (!heatEngine) return;
@@ -716,19 +783,20 @@ class Game {
         const targetPlayer = this.players.find(p => p.id === targetId);
         const hasAnchor = targetPlayer && targetPlayer.effects.some(e => e.type === 'anchor');
 
-        if (heatEngine.charge >= heatEngine.maxCharge) {
-            // 充满能量，释放3倍动量冲击（只对无定位锚的目标）
+        // 只要有充能就释放
+        if (heatEngine.charge > 0) {
+            // 释放充能点数倍的动量冲击（只对无定位锚的目标）
             if (targetPhysics && selfPhysics && !hasAnchor) {
                 const dx = targetPhysics.position.x - selfPhysics.position.x;
                 const dy = targetPhysics.position.y - selfPhysics.position.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist > 0) {
-                    const impulse = 375 * heatEngine.impulseMultiplier; // 3×动量冲击
+                    const impulse = 375 * heatEngine.charge; // 充能点数 × 基础动量
                     const impulseX = (dx / dist) * impulse;
                     const impulseY = (dy / dist) * impulse;
                     this.physics.applyImpulse(targetId, impulseX, impulseY);
 
-                    // 添加热机爆发特效 - 预生成粒子
+                    // 添加热机爆发特效
                     this.physics.addTempEffect({
                         type: 'heat_engine_blast',
                         x: targetPhysics.position.x,
@@ -741,7 +809,7 @@ class Game {
             }
         }
 
-        // 无论是否充满，热机都消失
+        // 热机消失
         player.heatEngine = null;
     }
 
@@ -761,7 +829,7 @@ class Game {
                     if (physics) {
                         physics._anchorPos = null;
                         Matter.Body.setStatic(physics, false);
-                        physics.collisionFilter.mask = 0x0001;
+                        physics.collisionFilter.mask = 0x0005;
                     }
                 }
                 return false;
@@ -785,6 +853,7 @@ class Game {
                 if (!player.eliminated) {
                     const newCards = this.cardSystem.draw(GAME_CONFIG.CARDS_PER_TURN);
                     player.cards.push(...newCards);
+                    player.cards.sort((a, b) => a.cost - b.cost);
                 }
             }
             this.isNewRound = false;
@@ -972,7 +1041,8 @@ class Game {
             quantumInvisible: {
                 1: this.players[0]?.quantumState !== null,
                 2: this.players[1]?.quantumState !== null
-            }
+            },
+            projectiles: this.physics.projectiles
         };
         this.renderer.render(completeGameState, aimingTarget, currentPlayerPhysics);
     }
@@ -998,7 +1068,8 @@ class Game {
             shields: {
                 1: this.players[0]?.shieldActive || false,
                 2: this.players[1]?.shieldActive || false
-            }
+            },
+            projectiles: this.physics.projectiles
         };
     }
 
