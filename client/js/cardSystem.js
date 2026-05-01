@@ -207,6 +207,28 @@ const CARDS_DATABASE = [
         formula: 'E = mc²',
         effect: { duration: 2, massMultiplier: 0.5, energyGain: 2 },
         rarity: 'rare'
+    },
+    {
+        id: 'radiation',
+        name: '辐射',
+        type: CARD_TYPES.ATTACK,
+        cost: 3,
+        icon: '☢️',
+        description: '烧毁对方价值最高的一张牌',
+        formula: 'E辐射 > E结合能',
+        effect: { targetEnemy: true },
+        rarity: 'rare'
+    },
+    {
+        id: 'brownian_motion',
+        name: '布朗运动',
+        type: CARD_TYPES.MOVEMENT,
+        cost: 1,
+        icon: '🎲',
+        description: '随机方向移动80冲量',
+        formula: '⟨x²⟩ = 2Dt',
+        effect: { impulse: 500 },
+        rarity: 'common'
     }
 ];
 
@@ -275,6 +297,24 @@ class CardSystem {
             const heatEngineCard = CARDS_DATABASE.find(c => c.id === 'heat_engine');
             for (let i = heatEngineCount; i < 6; i++) {
                 this.deck.push(heatEngineCard);
+            }
+        }
+
+        // 辐射卡牌数量适中（稀有卡，6张）
+        const radiationCount = this.deck.filter(c => c.id === 'radiation').length;
+        if (radiationCount < 6) {
+            const radiationCard = CARDS_DATABASE.find(c => c.id === 'radiation');
+            for (let i = radiationCount; i < 6; i++) {
+                this.deck.push(radiationCard);
+            }
+        }
+
+        // 布朗运动卡牌数量适中（普通卡，8张）
+        const brownianMotionCount = this.deck.filter(c => c.id === 'brownian_motion').length;
+        if (brownianMotionCount < 8) {
+            const brownianMotionCard = CARDS_DATABASE.find(c => c.id === 'brownian_motion');
+            for (let i = brownianMotionCount; i < 8; i++) {
+                this.deck.push(brownianMotionCard);
             }
         }
         

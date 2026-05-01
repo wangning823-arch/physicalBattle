@@ -1550,6 +1550,78 @@ class Renderer {
                 }
 
                 ctx.restore();
+            } else if (effect.type === 'radiation') {
+                // 辐射特效 - 放射性符号 + 粒子扩散
+                const x = this.centerX + (effect.x || 0);
+                const y = this.centerY + (effect.y || 0);
+                const seed = effect._seed || 42;
+
+                // 绿色辐射光晕
+                const glowR = 30 + (1 - progress) * 40;
+                const grad = ctx.createRadialGradient(x, y, 0, x, y, glowR);
+                grad.addColorStop(0, `rgba(0,255,80,${progress * 0.4})`);
+                grad.addColorStop(0.5, `rgba(0,200,50,${progress * 0.2})`);
+                grad.addColorStop(1, `rgba(0,100,30,0)`);
+                ctx.beginPath();
+                ctx.arc(x, y, glowR, 0, Math.PI * 2);
+                ctx.fillStyle = grad;
+                ctx.fill();
+
+                // 旋转的三叶辐射符号
+                const rotAngle = t * 2;
+                const bladeLen = 18 + (1 - progress) * 10;
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.rotate(rotAngle);
+                for (let i = 0; i < 3; i++) {
+                    ctx.save();
+                    ctx.rotate((Math.PI * 2 / 3) * i);
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.arc(0, 0, bladeLen, -0.3, 0.3);
+                    ctx.closePath();
+                    ctx.fillStyle = `rgba(0,255,80,${progress * 0.6})`;
+                    ctx.fill();
+                    ctx.strokeStyle = `rgba(0,255,80,${progress * 0.8})`;
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+                    ctx.restore();
+                }
+                ctx.beginPath();
+                ctx.arc(0, 0, 5, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(0,255,80,${progress * 0.8})`;
+                ctx.fill();
+                ctx.restore();
+
+                // 粒子向外扩散
+                const particles = _makeParticles(seed, 16, { minSpeed: 40, maxSpeed: 80, minSize: 1, maxSize: 3 });
+                const expand = 1 - progress;
+                particles.forEach(p => {
+                    const px = x + p.vx * expand * 0.8;
+                    const py = y + p.vy * expand * 0.8;
+                    const alpha = p.alpha * progress;
+                    ctx.beginPath();
+                    ctx.arc(px, py, p.size, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(0,255,80,${alpha})`;
+                    ctx.fill();
+                });
+
+                // 被烧毁卡牌名称提示
+                if (effect.burnedCardName && progress > 0.3) {
+                    const textAlpha = progress > 0.6 ? Math.min(1, (1 - progress) / 0.4) : Math.min(1, (progress - 0.3) / 0.3);
+                    ctx.font = 'bold 14px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillStyle = `rgba(255,80,80,${textAlpha})`;
+                    ctx.shadowColor = 'rgba(255,0,0,0.5)';
+                    ctx.shadowBlur = 8;
+                    ctx.fillText(`-${effect.burnedCardName}-`, x, y - 35 - (1 - progress) * 15);
+                    ctx.shadowBlur = 0;
+                }
+
+                if (progress > 0.95) triggerShake(4);
+
+                ctx.restore();
             }
 
             ctx.restore();

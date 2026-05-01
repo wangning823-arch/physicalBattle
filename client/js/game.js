@@ -508,6 +508,55 @@ class Game {
                 }
                 console.log('使用量子叠加后 physics.effects:', this.physics.effects.map(e => ({ type: e.type, duration: e.duration })));
                 break;
+            case 'radiation':
+                // 辐射：烧毁对方价值最高的一张牌
+                if (targetPlayer && targetPlayer.cards.length > 0) {
+                    // 价值评估：cost * 10 + rarity权重(common=1, rare=2, epic=3)
+                    const rarityWeight = { common: 1, rare: 2, epic: 3 };
+                    let bestIndex = 0;
+                    let bestValue = -1;
+                    targetPlayer.cards.forEach((c, i) => {
+                        const val = c.cost * 10 + (rarityWeight[c.rarity] || 1);
+                        if (val > bestValue) {
+                            bestValue = val;
+                            bestIndex = i;
+                        }
+                    });
+                    const burnedCard = targetPlayer.cards.splice(bestIndex, 1)[0];
+                    this.cardSystem.discard(burnedCard);
+                    // 辐射特效
+                    if (targetPhysics) {
+                        this.physics.addTempEffect({
+                            type: 'radiation',
+                            x: targetPhysics.position.x,
+                            y: targetPhysics.position.y,
+                            burnedCardName: burnedCard.name,
+                            life: 1000,
+                            maxLife: 1000,
+                            _seed: Date.now() + 12345
+                        });
+                    }
+                }
+                break;
+            case 'brownian_motion':
+                // 布朗运动：随机方向移动
+                if (selfPhysics) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const impulseX = Math.cos(angle) * card.effect.impulse;
+                    const impulseY = Math.sin(angle) * card.effect.impulse;
+                    this.physics.applyImpulse(playerId, impulseX, impulseY);
+                    // 冲刺残影特效
+                    this.physics.addTempEffect({
+                        type: 'dash_trail',
+                        x: selfPhysics.position.x,
+                        y: selfPhysics.position.y,
+                        angle: angle,
+                        life: 400,
+                        maxLife: 400,
+                        _seed: Date.now() + playerId * 3000
+                    });
+                }
+                break;
         }
         this.cardSystem.discard(card);
         this.checkGameOver();
