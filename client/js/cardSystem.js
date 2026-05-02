@@ -7,7 +7,7 @@ const CARDS_DATABASE = [
         icon: '💥',
         description: '向指定方向对敌人施加冲量',
         formula: 'J = Δp = m·Δv',
-        effect: { impulse: 375, needsAim: true, targetEnemy: true },
+        effect: { impulse: 200, needsAim: true, targetEnemy: true },
         rarity: 'common'
     },
     {
@@ -84,7 +84,7 @@ const CARDS_DATABASE = [
         icon: '☄️',
         description: '强力冲量攻击，将敌人推远',
         formula: 'E = ½mv²',
-        effect: { impulse: 500, needsAim: true, targetEnemy: true },
+        effect: { impulse: 400, needsAim: true, targetEnemy: true },
         rarity: 'epic'
     },
     {
@@ -238,8 +238,19 @@ const CARDS_DATABASE = [
         icon: '🔫',
         description: '消耗自身10%质量发射带电炮弹，速度与电荷量成正比，命中造成750冲量',
         formula: 'F = qvB, a = F/m',
-        effect: { needsAim: true, targetEnemy: true, massRatio: 0.1, speedPerCharge: 100, baseImpulse: 750 },
+        effect: { needsAim: true, targetEnemy: true, massRatio: 0.1, speedPerCharge: 100, baseImpulse: 400 },
         rarity: 'epic'
+    },
+    {
+        id: 'momentum_conservation',
+        name: '动量守恒',
+        type: CARD_TYPES.UTILITY,
+        cost: 2,
+        icon: '⚖️',
+        description: '2回合内使用冲量卡牌时，自身获得反方向等大小冲量',
+        formula: 'p₁ + p₂ = const',
+        effect: { duration: 2 },
+        rarity: 'rare'
     }
 ];
 
@@ -251,104 +262,41 @@ class CardSystem {
     }
 
     initDeck() {
-        // 构建基础牌组
+        // 每种卡牌的直接数量规定
+        const DECK_QUANTITIES = {
+            'momentum_blast': 16,
+            'directional_dash': 12,
+            'gravity_well': 12,
+            'repulsion_field': 12,
+            'ice_zone': 10,
+            'mass_increase': 12,
+            'mass_decrease': 12,
+            'explosive_charge': 10,
+            'anchor': 8,
+            'rigid_connection': 12,
+            'soft_rope': 12,
+            'damping_field': 12,
+            'charge_attach': 8,
+            'charge_attach_negative': 8,
+            'self_charge': 8,
+            'self_charge_negative': 8,
+            'quantum_superposition': 5,
+            'heat_engine': 7,
+            'mass_energy': 12,
+            'radiation': 9,
+            'brownian_motion': 12,
+            'electromagnetic_cannon': 7,
+            'momentum_conservation': 10
+        };
+
         this.deck = [];
-        for (let i = 0; i < 3; i++) {
-            this.deck.push(...CARDS_DATABASE);
-        }
-        // 动量冲击添加额外副本（12→15张）
-        const momentumBlast = CARDS_DATABASE.find(c => c.id === 'momentum_blast');
-        for (let i = 0; i < 3; i++) {
-            this.deck.push(momentumBlast);
-        }
-        
-        // 定位锚减少副本（12→8张）
-        let anchorRemoved = 0;
-        for (let i = this.deck.length - 1; i >= 0 && anchorRemoved < 4; i--) {
-            if (this.deck[i].id === 'anchor') {
-                this.deck.splice(i, 1);
-                anchorRemoved++;
-            }
-        }
-        
-        // 量子叠加减少副本为原来一半
-        const quantumCard = CARDS_DATABASE.find(c => c.id === 'quantum_superposition');
-        let quantumRemoved = 0;
-        for (let i = this.deck.length - 1; i >= 0 && quantumRemoved < 1; i--) {
-            if (this.deck[i].id === 'quantum_superposition') {
-                this.deck.splice(i, 1);
-                quantumRemoved++;
-            }
-        }
-        
-        // 将牌组数量翻倍，保持各卡牌概率不变
-        let baseDeck = [...this.deck];
-        this.deck = [...baseDeck, ...baseDeck];
-        
-        // 再次翻倍，使牌组数量增加到原来的2倍
-        baseDeck = [...this.deck];
-        this.deck = [...baseDeck, ...baseDeck];
-        
-        // 将电有关的4张卡牌数量都减小到8张
-        const electricCardIds = ['charge_attach', 'charge_attach_negative', 'self_charge', 'self_charge_negative'];
-        electricCardIds.forEach(cardId => {
-            let currentCount = this.deck.filter(c => c.id === cardId).length;
-            let toRemove = currentCount - 8;
-            if (toRemove > 0) {
-                for (let i = this.deck.length - 1; i >= 0 && toRemove > 0; i--) {
-                    if (this.deck[i].id === cardId) {
-                        this.deck.splice(i, 1);
-                        toRemove--;
-                    }
-                }
-            }
-        });
-        
-        // 确保热机卡牌数量适中（史诗卡，6张）
-        const heatEngineCount = this.deck.filter(c => c.id === 'heat_engine').length;
-        if (heatEngineCount < 6) {
-            const heatEngineCard = CARDS_DATABASE.find(c => c.id === 'heat_engine');
-            for (let i = heatEngineCount; i < 6; i++) {
-                this.deck.push(heatEngineCard);
+        for (const card of CARDS_DATABASE) {
+            const qty = DECK_QUANTITIES[card.id] || 0;
+            for (let i = 0; i < qty; i++) {
+                this.deck.push(card);
             }
         }
 
-        // 辐射卡牌数量适中（稀有卡，6张）
-        const radiationCount = this.deck.filter(c => c.id === 'radiation').length;
-        if (radiationCount < 6) {
-            const radiationCard = CARDS_DATABASE.find(c => c.id === 'radiation');
-            for (let i = radiationCount; i < 6; i++) {
-                this.deck.push(radiationCard);
-            }
-        }
-
-        // 布朗运动卡牌数量适中（普通卡，8张）
-        const brownianMotionCount = this.deck.filter(c => c.id === 'brownian_motion').length;
-        if (brownianMotionCount < 8) {
-            const brownianMotionCard = CARDS_DATABASE.find(c => c.id === 'brownian_motion');
-            for (let i = brownianMotionCount; i < 8; i++) {
-                this.deck.push(brownianMotionCard);
-            }
-        }
-
-        // 爆裂冲击减少副本（12→10张）
-        let explosiveRemoved = 0;
-        for (let i = this.deck.length - 1; i >= 0 && explosiveRemoved < 2; i--) {
-            if (this.deck[i].id === 'explosive_charge') {
-                this.deck.splice(i, 1);
-                explosiveRemoved++;
-            }
-        }
-
-        // 电磁炮卡牌数量适中（史诗卡，4张）
-        const emCannonCount = this.deck.filter(c => c.id === 'electromagnetic_cannon').length;
-        if (emCannonCount < 4) {
-            const emCannonCard = CARDS_DATABASE.find(c => c.id === 'electromagnetic_cannon');
-            for (let i = emCannonCount; i < 4; i++) {
-                this.deck.push(emCannonCard);
-            }
-        }
-        
         this.shuffle();
     }
 

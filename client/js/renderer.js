@@ -586,6 +586,123 @@ class Renderer {
             ctx.restore();
         }
 
+        // 动量守恒状态指示器
+        if (playerData && playerData.momentumConservation && playerData.momentumConservation.active) {
+            const mc = playerData.momentumConservation;
+            const yOff = -75;
+            ctx.save();
+            ctx.globalAlpha = 0.8;
+            ctx.fillStyle = '#1a0a2e';
+            const mcText = `⚖️ ${mc.duration}回合`;
+            ctx.font = 'bold 11px sans-serif';
+            const tw = ctx.measureText(mcText).width;
+            const mcw = tw + 16, mch = 18, mcr = 4;
+            const mcx = -mcw / 2, mcy = yOff - mch / 2;
+            ctx.beginPath();
+            ctx.moveTo(mcx + mcr, mcy);
+            ctx.lineTo(mcx + mcw - mcr, mcy);
+            ctx.quadraticCurveTo(mcx + mcw, mcy, mcx + mcw, mcy + mcr);
+            ctx.lineTo(mcx + mcw, mcy + mch - mcr);
+            ctx.quadraticCurveTo(mcx + mcw, mcy + mch, mcx + mcw - mcr, mcy + mch);
+            ctx.lineTo(mcx + mcr, mcy + mch);
+            ctx.quadraticCurveTo(mcx, mcy + mch, mcx, mcy + mch - mcr);
+            ctx.lineTo(mcx, mcy + mcr);
+            ctx.quadraticCurveTo(mcx, mcy, mcx + mcr, mcy);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#a855f7';
+            ctx.lineWidth = 1.5;
+            ctx.globalAlpha = 0.9;
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = '#c084fc';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(mcText, 0, yOff);
+            ctx.restore();
+        }
+
+        // 质量变化指示器
+        let extraIndicators = 0;
+        if (playerData && playerData.effects) {
+            const massEffect = playerData.effects.find(e => e.type === 'massChange');
+            if (massEffect) {
+                const isHeavy = massEffect.multiplier > 1;
+                const label = isHeavy ? `⬛ ${massEffect.multiplier}x` : `🔲 ${massEffect.multiplier}x`;
+                const yOff = -95 - extraIndicators * 22;
+                ctx.save();
+                ctx.globalAlpha = 0.8;
+                ctx.fillStyle = isHeavy ? '#2a0a0a' : '#0a2a0a';
+                ctx.font = 'bold 11px sans-serif';
+                const tw = ctx.measureText(label).width;
+                const bw = tw + 16, bh = 18, br = 4;
+                const bx = -bw / 2, by = yOff - bh / 2;
+                ctx.beginPath();
+                ctx.moveTo(bx + br, by);
+                ctx.lineTo(bx + bw - br, by);
+                ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + br);
+                ctx.lineTo(bx + bw, by + bh - br);
+                ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - br, by + bh);
+                ctx.lineTo(bx + br, by + bh);
+                ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - br);
+                ctx.lineTo(bx, by + br);
+                ctx.quadraticCurveTo(bx, by, bx + br, by);
+                ctx.closePath();
+                ctx.fill();
+                ctx.strokeStyle = isHeavy ? '#ef4444' : '#22c55e';
+                ctx.lineWidth = 1.5;
+                ctx.globalAlpha = 0.9;
+                ctx.stroke();
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = isHeavy ? '#fca5a5' : '#86efac';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(label, 0, yOff);
+                ctx.restore();
+                extraIndicators++;
+            }
+        }
+
+        // 定位锚指示器
+        if (playerData && playerData.effects) {
+            const anchorEffect = playerData.effects.find(e => e.type === 'anchor');
+            if (anchorEffect) {
+                const elapsed = (playerData.turnsPlayed || 0) - anchorEffect.startTurn;
+                const remaining = anchorEffect.remainingTurns - elapsed;
+                const yOff = -95 - extraIndicators * 22;
+                ctx.save();
+                ctx.globalAlpha = 0.8;
+                ctx.fillStyle = '#1a1a0a';
+                const label = `⚓ ${remaining}回合`;
+                ctx.font = 'bold 11px sans-serif';
+                const tw = ctx.measureText(label).width;
+                const bw = tw + 16, bh = 18, br = 4;
+                const bx = -bw / 2, by = yOff - bh / 2;
+                ctx.beginPath();
+                ctx.moveTo(bx + br, by);
+                ctx.lineTo(bx + bw - br, by);
+                ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + br);
+                ctx.lineTo(bx + bw, by + bh - br);
+                ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - br, by + bh);
+                ctx.lineTo(bx + br, by + bh);
+                ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - br);
+                ctx.lineTo(bx, by + br);
+                ctx.quadraticCurveTo(bx, by, bx + br, by);
+                ctx.closePath();
+                ctx.fill();
+                ctx.strokeStyle = '#CD853F';
+                ctx.lineWidth = 1.5;
+                ctx.globalAlpha = 0.9;
+                ctx.stroke();
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = '#DEB887';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(label, 0, yOff);
+                ctx.restore();
+            }
+        }
+
         // 玩家本体
         const pColor = player.playerId === 1 ? '#FF6B35' : '#1E90FF';
         ctx.fillStyle = pColor;

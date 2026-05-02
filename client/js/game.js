@@ -196,7 +196,11 @@ class Game {
                                 _seed: Date.now() + playerId * 1000
                             });
                         }
-                        // 未击中则不出效果
+                        // 后坐力：无论是否命中，基于瞄准方向施加
+                        const aimLen = Math.sqrt(lx * lx + ly * ly);
+                        if (aimLen > 0) {
+                            this.applyRecoil(playerId, (lx / aimLen) * card.effect.impulse, (ly / aimLen) * card.effect.impulse);
+                        }
                     }
                 }
                 break;
@@ -321,6 +325,11 @@ class Game {
                                 maxLife: 700,
                                 _seed: Date.now() + playerId * 2000
                             });
+                        }
+                        // 后坐力：无论是否命中，基于瞄准方向施加
+                        const aimLen = Math.sqrt(lx * lx + ly * ly);
+                        if (aimLen > 0) {
+                            this.applyRecoil(playerId, (lx / aimLen) * card.effect.impulse, (ly / aimLen) * card.effect.impulse);
                         }
                     }
                 }
@@ -466,6 +475,22 @@ class Game {
                     });
                 }
                 break;
+            case 'momentum_conservation':
+                // 动量守恒：2回合内使用冲量卡时自身获得反冲
+                selfPlayer.momentumConservation = {
+                    active: true,
+                    duration: card.effect.duration
+                };
+                this.physics.addTempEffect({
+                    type: 'charge_apply',
+                    x: selfPhysics.position.x,
+                    y: selfPhysics.position.y,
+                    charge: 0,
+                    life: 400,
+                    maxLife: 400,
+                    _seed: Date.now() + 7777
+                });
+                break;
             case 'mass_energy':
                 // 质能方程：质量降低50%，获得2点能量（可超上限）
                 if (selfPlayer && selfPhysics) {
@@ -597,6 +622,10 @@ class Game {
                         const vy = (dy / dist) * speed;
                         Matter.Body.setVelocity(projectile, { x: vx, y: vy });
 
+                        // 电磁炮反冲：发射瞬间获得反方向冲量
+                        const recoilImpulse = projectileMass * speed;
+                        this.applyRecoil(playerId, (dx / dist) * recoilImpulse, (dy / dist) * recoilImpulse);
+
                         // 添加到世界
                         Matter.Composite.add(this.physics.engine.world, projectile);
 
@@ -641,6 +670,14 @@ class Game {
                 if (currentPlayer.chargeDuration < 0) {
                     currentPlayer.charge = 0;
                     currentPlayer.chargeDuration = 0;
+                }
+            }
+
+            // 动量守恒倒计时
+            if (currentPlayer.momentumConservation && currentPlayer.momentumConservation.active) {
+                currentPlayer.momentumConservation.duration--;
+                if (currentPlayer.momentumConservation.duration <= 0) {
+                    currentPlayer.momentumConservation = null;
                 }
             }
 
@@ -724,7 +761,15 @@ class Game {
         }
         player.quantumState = null; // 恢复正常
     }
-    
+
+    // 动量守恒反冲：施加反方向等大小冲量
+    applyRecoil(playerId, impulseX, impulseY) {
+        const player = this.players.find(p => p.id === playerId);
+        if (player && player.momentumConservation && player.momentumConservation.active) {
+            this.physics.applyImpulse(playerId, -impulseX, -impulseY);
+        }
+    }
+
     // 手动发射热机
     fireHeatEngine(playerId) {
         const player = this.players.find(p => p.id === playerId);
@@ -747,10 +792,11 @@ class Game {
             const dy = targetPhysics.position.y - selfPhysics.position.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist > 0) {
-                const impulse = 375 * heatEngine.charge; // 充能点数 × 基础动量
+                const impulse = 200 * heatEngine.charge; // 充能点数 × 基础动量
                 const impulseX = (dx / dist) * impulse;
                 const impulseY = (dy / dist) * impulse;
                 this.physics.applyImpulse(targetId, impulseX, impulseY);
+                this.applyRecoil(player.id, impulseX, impulseY);
 
                 // 添加热机爆发特效
                 this.physics.addTempEffect({
@@ -791,10 +837,11 @@ class Game {
                 const dy = targetPhysics.position.y - selfPhysics.position.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist > 0) {
-                    const impulse = 375 * heatEngine.charge; // 充能点数 × 基础动量
+                    const impulse = 200 * heatEngine.charge; // 充能点数 × 基础动量
                     const impulseX = (dx / dist) * impulse;
                     const impulseY = (dy / dist) * impulse;
                     this.physics.applyImpulse(targetId, impulseX, impulseY);
+                    this.applyRecoil(player.id, impulseX, impulseY);
 
                     // 添加热机爆发特效
                     this.physics.addTempEffect({
@@ -981,26 +1028,30 @@ class Game {
                         impulseMagnitude = Math.max(-MAX_IMPULSE, Math.min(MAX_IMPULSE, impulseMagnitude));
                         const angle = Math.atan2(dy, dx);
 
-                        // 只对没有定位锚的玩家施加冲量
-                        if (!hasAnchor[0]) {
+                        // 只对没有定位锚且非量子叠加的玩家施加冲量
+                        if (!hasAnchor[0] && !this.players[0].quantumState) {
                             this.physics.applyImpulse(1, -Math.cos(angle) * impulseMagnitude, -Math.sin(angle) * impulseMagnitude);
                         }
-                        if (!hasAnchor[1]) {
+                        if (!hasAnchor[1] && !this.players[1].quantumState) {
                             this.physics.applyImpulse(2, Math.cos(angle) * impulseMagnitude, Math.sin(angle) * impulseMagnitude);
                         }
                     }
 
-                    // 异性电荷近距离阻尼：防止吸在一起后抖动
+                    // 异性电荷近距离阻尼：防止吸在一起后抖动（量子叠加玩家不受影响）
                     if (q1 * q2 < 0 && dist < 80) {
                         const dampFactor = 0.85;
-                        Matter.Body.setVelocity(p1Physics, {
-                            x: p1Physics.velocity.x * dampFactor,
-                            y: p1Physics.velocity.y * dampFactor
-                        });
-                        Matter.Body.setVelocity(p2Physics, {
-                            x: p2Physics.velocity.x * dampFactor,
-                            y: p2Physics.velocity.y * dampFactor
-                        });
+                        if (!this.players[0].quantumState) {
+                            Matter.Body.setVelocity(p1Physics, {
+                                x: p1Physics.velocity.x * dampFactor,
+                                y: p1Physics.velocity.y * dampFactor
+                            });
+                        }
+                        if (!this.players[1].quantumState) {
+                            Matter.Body.setVelocity(p2Physics, {
+                                x: p2Physics.velocity.x * dampFactor,
+                                y: p2Physics.velocity.y * dampFactor
+                            });
+                        }
                     }
                 }
             }

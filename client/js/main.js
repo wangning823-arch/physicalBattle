@@ -90,6 +90,30 @@ const GameUI = {
                 this.aimingTarget = null;
             }
         });
+
+        // 触摸事件支持（平板瞄准）
+        canvas.addEventListener('touchmove', (e) => {
+            if (this.game.aimingState.active) {
+                e.preventDefault();
+                const touch = e.touches[0];
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = 800 / rect.width;
+                const scaleY = 600 / rect.height;
+                this.aimingTarget = {
+                    x: (touch.clientX - rect.left) * scaleX - 400,
+                    y: (touch.clientY - rect.top) * scaleY - 300
+                };
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+            if (this.game.aimingState.active && this.aimingTarget) {
+                e.preventDefault();
+                this.game.confirmAim(this.aimingTarget.x, this.aimingTarget.y);
+                this.aimingTarget = null;
+                this.updateUI();
+            }
+        });
         
         document.getElementById('cards-hand').addEventListener('mouseover', (e) => {
             const cardEl = e.target.closest('.card');
