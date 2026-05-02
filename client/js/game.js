@@ -22,9 +22,17 @@ class Game {
             selectedIndices: []
         };
         this.isNewRound = false;
+        this.gameMode = 'pvp';
+        this.aiPlayer = null;
     }
 
-    initGame() {
+    initGame(mode = 'pvp') {
+        this.gameMode = mode;
+        if (mode === 'pve') {
+            this.aiPlayer = new AIPlayer(this);
+        } else {
+            this.aiPlayer = null;
+        }
         this.physics.createPlayer(-160, 0, 1);
         this.physics.createPlayer(160, 0, 2);
         this.players[0].charge = 0; // 初始化玩家1电荷为0
@@ -37,6 +45,10 @@ class Game {
         this.currentPlayerIndex = 0;
         this.turnPhase = 'discard';
         this.isNewRound = false;
+    }
+
+    isAITurn() {
+        return this.gameMode === 'pve' && this.currentPlayerIndex === 1 && this.aiPlayer;
     }
 
     dealCards() {
@@ -652,6 +664,15 @@ class Game {
                     }
                 }
                 break;
+            case 'magnetic_field':
+                // 磁场：全场产生磁场，带电玩家受到洛伦兹力偏转
+                this.physics.addEffect({
+                    type: 'magneticField',
+                    strength: card.effect.strength,
+                    duration: card.effect.duration,
+                    _seed: Date.now() + 13333
+                });
+                break;
         }
         this.cardSystem.discard(card);
         this.checkGameOver();
@@ -667,7 +688,7 @@ class Game {
             this.processPlayerEffects(currentPlayer);
             if (currentPlayer.chargeDuration > 0) {
                 currentPlayer.chargeDuration--;
-                if (currentPlayer.chargeDuration < 0) {
+                if (currentPlayer.chargeDuration <= 0) {
                     currentPlayer.charge = 0;
                     currentPlayer.chargeDuration = 0;
                 }
@@ -1056,6 +1077,34 @@ class Game {
                 }
             }
 
+            // ========== 处理磁场洛伦兹力 ==========
+            const magneticField = this.physics.effects.find(e => e.type === 'magneticField');
+            if (magneticField) {
+                for (let i = 0; i < this.players.length; i++) {
+                    const player = this.players[i];
+                    const physics = this.physics.getPlayer(i + 1);
+                    if (!physics || player.eliminated || !player.charge || player.charge === 0) continue;
+                    if (hasAnchor[i]) continue;
+                    if (player.quantumState) continue;
+
+                    const vx = physics.velocity.x;
+                    const vy = physics.velocity.y;
+                    const speed = Math.sqrt(vx * vx + vy * vy);
+                    if (speed < 0.01) continue;
+
+                    // 洛伦兹力：F = qv × B（2D: B垂直纸面向外）
+                    // Fx = q * vy * B, Fy = -q * vx * B
+                    const B = magneticField.strength;
+                    const q = player.charge;
+                    const lorentzFx = q * vy * B;
+                    const lorentzFy = -q * vx * B;
+                    Matter.Body.applyForce(physics, physics.position, {
+                        x: lorentzFx,
+                        y: lorentzFy
+                    });
+                }
+            }
+
             this.physics.update(deltaTime);
 
             // ========== 物理更新后再次强制把有定位锚的玩家按回去 ==========
@@ -1125,6 +1174,7 @@ class Game {
     }
 
     restart() {
+        const savedMode = this.gameMode;
         this.physics.reset();
         this.physics.createPlayer(-160, 0, 1);
         this.physics.createPlayer(160, 0, 2);
@@ -1143,6 +1193,12 @@ class Game {
         };
         this.state = GAME_STATES.PLAYING;
         this.isNewRound = false;
+        this.gameMode = savedMode;
+        if (savedMode === 'pve') {
+            this.aiPlayer = new AIPlayer(this);
+        } else {
+            this.aiPlayer = null;
+        }
         this.dealCards();
     }
 }

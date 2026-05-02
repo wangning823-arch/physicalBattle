@@ -29,9 +29,9 @@ const GAME_STATES = {
 };
 
 const CARD_TYPES = {
-    ATTACK: 'attack',
-    DEFENSE: 'defense',
-    TERRAIN: 'terrain',
-    MOVEMENT: 'movement',
-    UTILITY: 'utility'
+    FORCE: 'force',
+    ELECTRIC: 'electric',
+    HEAT: 'heat',
+    LIGHT: 'light',
+    MELEE: 'melee'
 };

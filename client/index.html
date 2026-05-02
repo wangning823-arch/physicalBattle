@@ -7,6 +7,25 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+    <div id="mode-select-modal" class="modal">
+        <div class="modal-content mode-select-content">
+            <h2 style="color: #1E90FF; margin-bottom: 20px;">物理竞技场</h2>
+            <p style="color: #aaa; margin-bottom: 30px;">选择游戏模式</p>
+            <div style="display: flex; gap: 20px; justify-content: center;">
+                <button id="mode-pvp-btn" class="mode-btn">
+                    <span style="font-size: 32px;">👥</span>
+                    <strong style="color: #e0e0e0;">双人对战</strong>
+                    <span style="color: #aaa; font-size: 12px;">和朋友一起玩</span>
+                </button>
+                <button id="mode-pve-btn" class="mode-btn">
+                    <span style="font-size: 32px;">🤖</span>
+                    <strong style="color: #e0e0e0;">人机对战</strong>
+                    <span style="color: #aaa; font-size: 12px;">挑战AI对手</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div id="game-container">
         <div id="hud-top">
             <div id="player1-status" class="player-status player1">
@@ -143,6 +162,10 @@
         <div id="hand-container">
             <div id="cards-area">
                 <div id="cards-hand"></div>
+                <div id="ai-thinking" style="display: none; align-items: center; justify-content: center; gap: 10px; color: #1E90FF; font-size: 18px; padding: 20px;">
+                    <div class="ai-spinner"></div>
+                    <span>AI 思考中...</span>
+                </div>
             </div>
             <div style="display: flex; gap: 10px;">
                 <button id="end-turn-btn">结束回合</button>
@@ -153,7 +176,10 @@
     <div id="game-over-modal" class="hidden">
         <div class="modal-content">
             <h2 id="winner-text"></h2>
-            <button id="restart-btn">再来一局</button>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button id="restart-btn">再来一局</button>
+                <button id="back-to-menu-btn">返回选择</button>
+            </div>
         </div>
     </div>
 
@@ -262,6 +288,11 @@
                 <strong style="color: #e0e0e0;">辐射 (3能量)</strong>
                 <p style="margin: 5px 0; font-size: 12px; color: #aaa;">烧毁对方价值最高的一张牌</p>
             </div>
+            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #a855f7; border-top: 3px solid #ffd700;">
+                <span style="font-size: 28px;">🔮</span>
+                <strong style="color: #e0e0e0;">磁场 (3能量)</strong>
+                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">全场产生磁场，带电玩家移动时受到洛伦兹力偏转，持续2回合</p>
+            </div>
             <!-- ========== 史诗 Epic ========== -->
             <div style="background: #2d2d50; padding: 12px; border-radius: 10px; border: 2px solid #f59e0b; border-top: 3px solid #ef4444;">
                 <span style="font-size: 28px;">☄️</span>
@@ -299,6 +330,7 @@
     <script src="js/physics.js"></script>
     <script src="js/cardSystem.js"></script>
     <script src="js/renderer.js"></script>
+    <script src="js/aiPlayer.js"></script>
     <script src="js/game.js"></script>
     <script src="js/main.js"></script>
 </body>

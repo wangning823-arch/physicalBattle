@@ -930,6 +930,64 @@ class Renderer {
                 ctx.textBaseline = 'middle';
                 ctx.fillText('🛡️', x, y);
 
+            } else if (effect.type === 'magneticField') {
+                // 磁场 - 全场磁感线 + 旋转粒子
+                ctx.save();
+                ctx.translate(this.centerX, this.centerY);
+
+                // 裁剪到竞技场
+                ctx.beginPath();
+                ctx.arc(0, 0, GAME_CONFIG.ARENA_RADIUS, 0, Math.PI * 2);
+                ctx.clip();
+
+                // 底层半透明磁场覆盖
+                ctx.beginPath();
+                ctx.arc(0, 0, GAME_CONFIG.ARENA_RADIUS, 0, Math.PI * 2);
+                const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, GAME_CONFIG.ARENA_RADIUS);
+                grad.addColorStop(0, 'rgba(0,180,255,0.06)');
+                grad.addColorStop(0.5, 'rgba(0,150,255,0.04)');
+                grad.addColorStop(1, 'rgba(0,100,255,0.02)');
+                ctx.fillStyle = grad;
+                ctx.fill();
+
+                // 同心圆磁感线（动画旋转）
+                ctx.globalAlpha = 0.25;
+                ctx.strokeStyle = '#00AAFF';
+                ctx.lineWidth = 1.5;
+                for (let r = 60; r < GAME_CONFIG.ARENA_RADIUS; r += 60) {
+                    const offset = time * 0.3 * (r % 120 === 0 ? 1 : -1);
+                    ctx.beginPath();
+                    ctx.arc(0, 0, r, offset, offset + Math.PI * 1.5);
+                    ctx.stroke();
+                }
+
+                // 旋转磁力粒子
+                const rng = _seededRandom(effect._seed || 13333);
+                ctx.globalAlpha = 0.6;
+                for (let i = 0; i < 20; i++) {
+                    const baseAngle = rng() * Math.PI * 2;
+                    const baseR = rng() * GAME_CONFIG.ARENA_RADIUS * 0.9;
+                    const rotSpeed = 0.5 + rng() * 0.5;
+                    const angle = baseAngle + time * rotSpeed;
+                    const px = Math.cos(angle) * baseR;
+                    const py = Math.sin(angle) * baseR;
+                    const sz = 1.5 + rng() * 2;
+                    ctx.beginPath();
+                    ctx.arc(px, py, sz, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(100,200,255,${0.3 + 0.3 * Math.sin(time * 3 + i)})`;
+                    ctx.fill();
+                }
+
+                // 中心B标记
+                ctx.globalAlpha = 0.7;
+                ctx.fillStyle = '#00CCFF';
+                ctx.font = 'bold 28px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('B⃗', 0, 0);
+
+                ctx.restore();
+
             } else if (effect.type === 'rigid_constraint' && players && players.length >= 2) {
                 // 刚性连接 - 能量锁链 + 电弧
                 const p1 = players[0], p2 = players[1];
@@ -1590,8 +1648,8 @@ class Renderer {
 
                 // 卡牌类型颜色
                 const typeColors = {
-                    attack: '#ef4444', defense: '#3b82f6', terrain: '#22c55e',
-                    movement: '#f59e0b', utility: '#a855f7'
+                    force: '#ff6b35', electric: '#ffd700', heat: '#ef4444',
+                    light: '#a855f7', melee: '#3b82f6'
                 };
                 const color = typeColors[effect.cardType] || '#ffffff';
 

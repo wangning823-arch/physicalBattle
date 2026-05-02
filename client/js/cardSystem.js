@@ -2,7 +2,7 @@ const CARDS_DATABASE = [
     {
         id: 'momentum_blast',
         name: '动量冲击',
-        type: CARD_TYPES.ATTACK,
+        type: CARD_TYPES.FORCE,
         cost: 1,
         icon: '💥',
         description: '向指定方向对敌人施加冲量',
@@ -13,7 +13,7 @@ const CARDS_DATABASE = [
     {
         id: 'directional_dash',
         name: '定向冲刺',
-        type: CARD_TYPES.MOVEMENT,
+        type: CARD_TYPES.FORCE,
         cost: 1,
         icon: '🏃',
         description: '向指定方向冲刺',
@@ -24,7 +24,7 @@ const CARDS_DATABASE = [
     {
         id: 'gravity_well',
         name: '引力陷阱',
-        type: CARD_TYPES.TERRAIN,
+        type: CARD_TYPES.FORCE,
         cost: 2,
         icon: '🕳️',
         description: '在指定位置放置引力源，持续2回合',
@@ -35,7 +35,7 @@ const CARDS_DATABASE = [
     {
         id: 'repulsion_field',
         name: '排斥力场',
-        type: CARD_TYPES.DEFENSE,
+        type: CARD_TYPES.FORCE,
         cost: 2,
         icon: '💫',
         description: '自身周围产生持续排斥力，持续2回合',
@@ -46,7 +46,7 @@ const CARDS_DATABASE = [
             {
                 id: 'ice_zone',
                 name: '冰霜地带',
-                type: CARD_TYPES.TERRAIN,
+                type: CARD_TYPES.FORCE,
                 cost: 1,
                 icon: '🧊',
                 description: '指定区域摩擦系数大幅降低，持续1回合',
@@ -57,8 +57,8 @@ const CARDS_DATABASE = [
             {
                 id: 'mass_increase',
                 name: '惯性增强',
-                type: CARD_TYPES.UTILITY,
-                cost: 1,
+                type: CARD_TYPES.FORCE,
+                cost: 2,
                 icon: '⬛',
                 description: '自身质量变为2倍，持续2回合',
                 formula: 'F = ma',
@@ -68,7 +68,7 @@ const CARDS_DATABASE = [
             {
                 id: 'mass_decrease',
                 name: '惯性减弱',
-                type: CARD_TYPES.UTILITY,
+                type: CARD_TYPES.FORCE,
                 cost: 1,
                 icon: '🔲',
                 description: '自身质量变为0.5倍，持续2回合',
@@ -79,7 +79,7 @@ const CARDS_DATABASE = [
     {
         id: 'explosive_charge',
         name: '爆裂冲击',
-        type: CARD_TYPES.ATTACK,
+        type: CARD_TYPES.FORCE,
         cost: 3,
         icon: '☄️',
         description: '强力冲量攻击，将敌人推远',
@@ -90,8 +90,8 @@ const CARDS_DATABASE = [
     {
         id: 'anchor',
         name: '定位锚',
-        type: CARD_TYPES.DEFENSE,
-        cost: 2,
+        type: CARD_TYPES.FORCE,
+        cost: 3,
         icon: '⚓',
         description: '固定自身位置1回合，免疫位移',
         formula: 'v = 0',
@@ -101,7 +101,7 @@ const CARDS_DATABASE = [
     {
         id: 'rigid_connection',
         name: '刚性连接',
-        type: CARD_TYPES.UTILITY,
+        type: CARD_TYPES.FORCE,
         cost: 2,
         icon: '⛓️',
         description: '将你与对手刚性连接，距离保持不变，持续2回合',
@@ -112,7 +112,7 @@ const CARDS_DATABASE = [
     {
         id: 'soft_rope',
         name: '软绳约束',
-        type: CARD_TYPES.UTILITY,
+        type: CARD_TYPES.FORCE,
         cost: 1,
         icon: '🪢',
         description: '用软绳连接你与对手，距离可自由变化但超过原长时立即锁定，持续3回合',
@@ -123,7 +123,7 @@ const CARDS_DATABASE = [
     {
         id: 'damping_field',
         name: '阻尼领域',
-        type: CARD_TYPES.DEFENSE,
+        type: CARD_TYPES.FORCE,
         cost: 2,
         icon: '🫧',
         description: '在指定位置放置阻尼领域，区域内运动快速衰减，持续2回合',
@@ -134,7 +134,7 @@ const CARDS_DATABASE = [
     {
         id: 'charge_attach',
         name: '正电荷附着',
-        type: CARD_TYPES.ATTACK,
+        type: CARD_TYPES.ELECTRIC,
         cost: 1,
         icon: '🧲',
         description: '给敌人附着一个正电荷，持续2回合',
@@ -145,7 +145,7 @@ const CARDS_DATABASE = [
     {
         id: 'charge_attach_negative',
         name: '负电荷附着',
-        type: CARD_TYPES.ATTACK,
+        type: CARD_TYPES.ELECTRIC,
         cost: 1,
         icon: '🪩',
         description: '给敌人附着一个负电荷，持续2回合',
@@ -156,7 +156,7 @@ const CARDS_DATABASE = [
     {
         id: 'self_charge',
         name: '自身带正电',
-        type: CARD_TYPES.UTILITY,
+        type: CARD_TYPES.ELECTRIC,
         cost: 1,
         icon: '⚡',
         description: '给自己附着一个正电荷，持续2回合',
@@ -167,7 +167,7 @@ const CARDS_DATABASE = [
     {
         id: 'self_charge_negative',
         name: '自身带负电',
-        type: CARD_TYPES.UTILITY,
+        type: CARD_TYPES.ELECTRIC,
         cost: 1,
         icon: '🔋',
         description: '给自己附着一个负电荷，持续2回合',
@@ -178,7 +178,7 @@ const CARDS_DATABASE = [
     {
         id: 'quantum_superposition',
         name: '量子叠加',
-        type: CARD_TYPES.DEFENSE,
+        type: CARD_TYPES.MELEE,
         cost: 4,
         icon: '👻',
         description: '进入量子叠加态：隐身，本回合无法出牌，对手回合免疫一切，下回合随机位置坍缩',
@@ -189,7 +189,7 @@ const CARDS_DATABASE = [
     {
         id: 'heat_engine',
         name: '热机',
-        type: CARD_TYPES.UTILITY,
+        type: CARD_TYPES.HEAT,
         cost: 4,
         icon: '🔥',
         description: '召唤热机附身，2回合内可充能（最多6点），充几点就造成几倍动量冲击，被冰冻则能量归零',
@@ -200,7 +200,7 @@ const CARDS_DATABASE = [
     {
         id: 'mass_energy',
         name: '质能方程',
-        type: CARD_TYPES.UTILITY,
+        type: CARD_TYPES.MELEE,
         cost: 0,
         icon: '✨',
         description: '质量转化为能量：质量降低50%持续2轮，立即获得2点能量（可超过上限）',
@@ -211,7 +211,7 @@ const CARDS_DATABASE = [
     {
         id: 'radiation',
         name: '辐射',
-        type: CARD_TYPES.ATTACK,
+        type: CARD_TYPES.LIGHT,
         cost: 3,
         icon: '☢️',
         description: '烧毁对方价值最高的一张牌',
@@ -222,7 +222,7 @@ const CARDS_DATABASE = [
     {
         id: 'brownian_motion',
         name: '布朗运动',
-        type: CARD_TYPES.MOVEMENT,
+        type: CARD_TYPES.FORCE,
         cost: 1,
         icon: '🎲',
         description: '随机方向移动80冲量',
@@ -233,7 +233,7 @@ const CARDS_DATABASE = [
     {
         id: 'electromagnetic_cannon',
         name: '电磁炮',
-        type: CARD_TYPES.ATTACK,
+        type: CARD_TYPES.ELECTRIC,
         cost: 3,
         icon: '🔫',
         description: '消耗自身10%质量发射带电炮弹，速度与电荷量成正比，命中造成750冲量',
@@ -244,12 +244,23 @@ const CARDS_DATABASE = [
     {
         id: 'momentum_conservation',
         name: '动量守恒',
-        type: CARD_TYPES.UTILITY,
+        type: CARD_TYPES.FORCE,
         cost: 2,
         icon: '⚖️',
         description: '2回合内使用冲量卡牌时，自身获得反方向等大小冲量',
         formula: 'p₁ + p₂ = const',
         effect: { duration: 2 },
+        rarity: 'rare'
+    },
+    {
+        id: 'magnetic_field',
+        name: '磁场',
+        type: CARD_TYPES.ELECTRIC,
+        cost: 3,
+        icon: '🔮',
+        description: '全场产生磁场，带电玩家移动时受到洛伦兹力偏转，持续2回合',
+        formula: 'F = qv × B',
+        effect: { duration: 2, strength: 0.15 },
         rarity: 'rare'
     }
 ];
@@ -286,7 +297,8 @@ class CardSystem {
             'radiation': 9,
             'brownian_motion': 12,
             'electromagnetic_cannon': 7,
-            'momentum_conservation': 10
+            'momentum_conservation': 10,
+            'magnetic_field': 8
         };
 
         this.deck = [];

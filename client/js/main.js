@@ -1,6 +1,7 @@
 const GameUI = {
     game: null,
     lastTime: 0,
+    gameStarted: false,
 
     init() {
         console.log('=== Game Initializing ===');
@@ -9,26 +10,59 @@ const GameUI = {
             console.error('Canvas not found');
             return;
         }
-        
+
         this.game = new Game(canvas);
         console.log('Game instance created');
-        
+
         this.setupEventListeners();
         console.log('Event listeners set up');
-        
-        this.game.initGame();
-        console.log('Game initialized');
-        
+
+        this.showModeSelect();
+        console.log('Mode select shown');
+    },
+
+    showModeSelect() {
+        const modal = document.getElementById('mode-select-modal');
+        if (modal) {
+            modal.classList.remove('hidden');
+        }
+    },
+
+    startGame(mode) {
+        const modal = document.getElementById('mode-select-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+
+        this.game.initGame(mode);
+        console.log('Game initialized with mode:', mode);
+
+        const p2Name = document.querySelector('#player2-status .player-name');
+        if (p2Name) {
+            p2Name.textContent = mode === 'pve' ? 'AI 对手' : '玩家 2';
+        }
+
+        const p2Avatar = document.querySelector('#player2-status .player-avatar');
+        if (p2Avatar) {
+            p2Avatar.textContent = mode === 'pve' ? 'AI' : 'P2';
+        }
+
+        this.gameStarted = true;
         this.updateUI();
-        
-        // 初始化后，先处理玩家一的弃牌检查
         this.handleCurrentPhase();
-        
         this.gameLoop();
         console.log('Game loop started');
     },
 
     setupEventListeners() {
+        document.getElementById('mode-pvp-btn').addEventListener('click', () => {
+            this.startGame('pvp');
+        });
+
+        document.getElementById('mode-pve-btn').addEventListener('click', () => {
+            this.startGame('pve');
+        });
+
         document.getElementById('end-turn-btn').addEventListener('click', () => {
             console.log('End turn button clicked');
             if (this.game.aimingState.active) {
@@ -40,14 +74,18 @@ const GameUI = {
         });
 
         document.getElementById('restart-btn').addEventListener('click', () => {
-            this.game.restart();
             document.getElementById('game-over-modal').classList.add('hidden');
-            this.updateUI();
-            this.handleCurrentPhase();
+            this.showModeSelect();
+        });
+
+        document.getElementById('back-to-menu-btn').addEventListener('click', () => {
+            document.getElementById('game-over-modal').classList.add('hidden');
+            this.showModeSelect();
         });
 
         document.getElementById('cards-hand').addEventListener('click', (e) => {
             console.log('Cards area clicked');
+            if (this.game.isAITurn()) return;
             if (this.game.aimingState.active) return;
             if (this.game.turnPhase !== 'play') return; // 只能在出牌阶段出牌
             const card = e.target.closest('.card');
@@ -146,6 +184,13 @@ const GameUI = {
 
     // 处理当前阶段
     handleCurrentPhase() {
+        if (!this.gameStarted) return;
+
+        if (this.game.isAITurn()) {
+            this.triggerAITurn();
+            return;
+        }
+
         if (this.game.turnPhase === 'discard') {
             // 弃牌阶段，检查是否需要弃牌
             const needDiscard = this.game.checkNeedDiscard(this.game.currentPlayerIndex);
@@ -161,6 +206,21 @@ const GameUI = {
         }
     },
 
+    async triggerAITurn() {
+        if (!this.game.aiPlayer || this.game.aiPlayer.isThinking) return;
+
+        this.updateUI();
+
+        await this.game.aiPlayer.playTurn(this.game.players[1].id);
+
+        if (this.game.isNewRound) {
+            this.game.drawCardsForAllPlayers();
+        }
+
+        this.updateUI();
+        this.handleCurrentPhase();
+    },
+
     updateUI() {
         console.log('========== updateUI() 开始 ==========');
         this.updateEnergyBars();
@@ -169,16 +229,28 @@ const GameUI = {
         this.updatePlayerEffects();
         this.updatePhysicsParamsPanel();
         this.updateCardParamsPanel();
-        
-        const endTurnBtn = document.getElementById('end-turn-btn');
-        if (this.game.aimingState.active) {
-            endTurnBtn.textContent = '取消瞄准';
-        } else {
-            endTurnBtn.textContent = '完成出牌';
-        }
-        
 
-        
+        const endTurnBtn = document.getElementById('end-turn-btn');
+        const cardsHand = document.getElementById('cards-hand');
+        const aiThinking = document.getElementById('ai-thinking');
+
+        if (this.game.isAITurn()) {
+            endTurnBtn.disabled = true;
+            endTurnBtn.textContent = 'AI 回合中...';
+            if (cardsHand) cardsHand.style.display = 'none';
+            if (aiThinking) aiThinking.style.display = 'flex';
+        } else {
+            endTurnBtn.disabled = false;
+            if (cardsHand) cardsHand.style.display = 'flex';
+            if (aiThinking) aiThinking.style.display = 'none';
+
+            if (this.game.aimingState.active) {
+                endTurnBtn.textContent = '取消瞄准';
+            } else {
+                endTurnBtn.textContent = '完成出牌';
+            }
+        }
+
         console.log('========== updateUI() 完成 ==========');
     },
     
@@ -460,11 +532,11 @@ const GameUI = {
     
     getCardTypeName(type) {
         const typeNames = {
-            'attack': '攻击',
-            'defense': '防御',
-            'terrain': '地形',
-            'movement': '移动',
-            'utility': '辅助'
+            'force': '力',
+            'electric': '电',
+            'heat': '热',
+            'light': '光',
+            'melee': '近'
         };
         return typeNames[type] || type;
     },
@@ -575,11 +647,16 @@ const GameUI = {
         const currentPlayerId = this.game.players[this.game.currentPlayerIndex]?.id;
         const phaseText = this.game.turnPhase === 'discard' ? '弃牌阶段' : '出牌阶段';
 
+        let playerLabel = `玩家 ${currentPlayerId}`;
+        if (this.game.gameMode === 'pve' && currentPlayerId === 2) {
+            playerLabel = 'AI';
+        }
+
         if (indicator) {
             indicator.textContent = this.game.currentTurn;
         }
         if (phaseEl) {
-            phaseEl.textContent = `玩家 ${currentPlayerId} - ${phaseText}`;
+            phaseEl.textContent = `${playerLabel} - ${phaseText}`;
             phaseEl.classList.toggle('active', this.game.turnPhase === 'play');
         }
 
@@ -646,6 +723,8 @@ const GameUI = {
         if (modal && winnerText) {
             if (winner.id === 0) {
                 winnerText.textContent = '平局!';
+            } else if (this.game.gameMode === 'pve' && winner.id === 2) {
+                winnerText.textContent = 'AI 获胜!';
             } else {
                 winnerText.textContent = `玩家 ${winner.id} 获胜!`;
             }
