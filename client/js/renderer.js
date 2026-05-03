@@ -704,7 +704,8 @@ class Renderer {
         }
 
         // 玩家本体
-        const pColor = player.playerId === 1 ? '#FF6B35' : '#1E90FF';
+        const playerColors = { 1: '#FF6B35', 2: '#1E90FF', 3: '#22c55e' };
+        const pColor = playerColors[player.playerId] || '#FF6B35';
         ctx.fillStyle = pColor;
         ctx.fillRect(-w / 2, -h / 2, w, h);
         ctx.strokeStyle = hasAnchor ? '#CD853F' : '#fff';
@@ -990,7 +991,15 @@ class Renderer {
 
             } else if (effect.type === 'rigid_constraint' && players && players.length >= 2) {
                 // 刚性连接 - 能量锁链 + 电弧
-                const p1 = players[0], p2 = players[1];
+                let p1, p2;
+                if (effect.player1Id && effect.player2Id) {
+                    p1 = players.find(p => p.playerId === effect.player1Id);
+                    p2 = players.find(p => p.playerId === effect.player2Id);
+                } else {
+                    p1 = players[0];
+                    p2 = players[1];
+                }
+                if (!p1 || !p2) { ctx.restore(); return; }
                 const x1 = this.centerX + p1.position.x;
                 const y1 = this.centerY + p1.position.y;
                 const x2 = this.centerX + p2.position.x;
@@ -1045,7 +1054,15 @@ class Renderer {
                 ctx.restore();
 
             } else if (effect.type === 'soft_rope' && players && players.length >= 2) {
-                const p1 = players[0], p2 = players[1];
+                let p1, p2;
+                if (effect.player1Id && effect.player2Id) {
+                    p1 = players.find(p => p.playerId === effect.player1Id);
+                    p2 = players.find(p => p.playerId === effect.player2Id);
+                } else {
+                    p1 = players[0];
+                    p2 = players[1];
+                }
+                if (!p1 || !p2) { ctx.restore(); return; }
                 const x1 = this.centerX + p1.position.x;
                 const y1 = this.centerY + p1.position.y;
                 const x2 = this.centerX + p2.position.x;
@@ -1954,6 +1971,38 @@ class Renderer {
 
         if (aimingTarget && currentPlayerPhysics) {
             this.drawAimingLine(currentPlayerPhysics, aimingTarget, gameState);
+        }
+
+        // 目标选择指示器（3人模式）
+        if (gameState.targetingActive && gameState.currentPlayerId && playersToDraw) {
+            const t = Date.now() / 1000;
+            playersToDraw.forEach(p => {
+                if (p.playerId === gameState.currentPlayerId) return;
+                const pd = gameState.playersData ? gameState.playersData.find(d => d.id === p.playerId) : null;
+                if (pd && pd.eliminated) return;
+                const x = this.centerX + p.position.x;
+                const y = this.centerY + p.position.y;
+                const pulse = Math.sin(t * 4) * 0.15 + 0.35;
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(x, y, 35, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(255,215,0,${pulse + 0.3})`;
+                ctx.lineWidth = 3;
+                ctx.setLineDash([8, 4]);
+                ctx.lineDashOffset = -t * 20;
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.beginPath();
+                ctx.arc(x, y, 35, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255,215,0,${pulse * 0.2})`;
+                ctx.fill();
+                ctx.fillStyle = '#FFD700';
+                ctx.font = 'bold 14px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('选择', x, y);
+                ctx.restore();
+            });
         }
 
         if (playersToDraw) {

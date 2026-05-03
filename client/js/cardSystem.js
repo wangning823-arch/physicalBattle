@@ -29,7 +29,7 @@ const CARDS_DATABASE = [
         icon: '🕳️',
         description: '在指定位置放置引力源，持续2回合',
         formula: 'F = G·M/r²',
-        effect: { duration: 4, radius: 150, strength: 400, needsAim: true, placeAnywhere: true },
+        effect: { duration: 2, radius: 150, strength: 400, needsAim: true, placeAnywhere: true },
         rarity: 'rare'
     },
     {
@@ -40,7 +40,7 @@ const CARDS_DATABASE = [
         icon: '💫',
         description: '自身周围产生持续排斥力，持续2回合',
         formula: 'F ∝ 1/r²',
-        effect: { duration: 4, radius: 120, strength: 600 },
+        effect: { duration: 2, radius: 120, strength: 600 },
         rarity: 'rare'
     },
             {
@@ -51,7 +51,7 @@ const CARDS_DATABASE = [
                 icon: '🧊',
                 description: '指定区域摩擦系数大幅降低，持续1回合',
                 formula: 'μ → 0.03',
-                effect: { duration: 2, friction: 0.03, radius: 80, needsAim: true, placeAnywhere: true },
+                effect: { duration: 1, friction: 0.03, radius: 80, needsAim: true, placeAnywhere: true },
                 rarity: 'common'
             },
             {
@@ -106,7 +106,7 @@ const CARDS_DATABASE = [
         icon: '⛓️',
         description: '将你与对手刚性连接，距离保持不变，持续2回合',
         formula: 'd = const',
-        effect: { duration: 4, type: 'rigid_constraint' },
+        effect: { duration: 2, type: 'rigid_constraint' },
         rarity: 'rare'
     },
     {
@@ -117,7 +117,7 @@ const CARDS_DATABASE = [
         icon: '🪢',
         description: '用软绳连接你与对手，距离可自由变化但超过原长时立即锁定，持续3回合',
         formula: 'F = 0 (d ≤ d₀); d = d₀ (d > d₀)',
-        effect: { duration: 6, type: 'soft_rope' },
+        effect: { duration: 3, type: 'soft_rope' },
         rarity: 'rare'
     },
     {
@@ -128,7 +128,7 @@ const CARDS_DATABASE = [
         icon: '🫧',
         description: '在指定位置放置阻尼领域，区域内运动快速衰减，持续2回合',
         formula: "v' = v·e^(-γt)",
-        effect: { duration: 4, radius: 80, type: 'dampingField', needsAim: true, placeAnywhere: true },
+        effect: { duration: 2, radius: 80, type: 'dampingField', needsAim: true, placeAnywhere: true },
         rarity: 'rare'
     },
     {

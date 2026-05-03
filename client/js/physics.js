@@ -79,17 +79,10 @@ class PhysicsEngine {
     /**
      * 更新效果的剩余回合数（每回合调用一次）
      */
-    updateEffectsTurn() {
-        // 每个玩家出牌结束时调用，减少所有效果的 duration
-        this.effects.forEach(effect => {
-            if (effect.duration > 0) {
-                effect.duration--;
-            }
-        });
-
-        // 第二步：再过滤掉 duration <= 0 的效果
+    updateEffectsTurn(currentTurn) {
+        // 使用绝对回合数判断效果是否过期
         this.effects = this.effects.filter(effect => {
-            if (effect.duration <= 0) {
+            if (effect.expiryRound !== undefined && currentTurn >= effect.expiryRound) {
                 // 效果结束，恢复玩家属性
                 if (effect.type === 'frictionZone') {
                     this.players.forEach(player => {
@@ -106,8 +99,6 @@ class PhysicsEngine {
             }
             return true;
         });
-        
-        console.log('过滤后的 effects:', this.effects.map(e => ({ type: e.type, duration: e.duration })));
         
         // 检查是否有刚性约束效果需要处理
         const rigidEffect = this.effects.find(e => e.type === 'rigid_constraint');
@@ -128,58 +119,68 @@ class PhysicsEngine {
     /**
      * 创建刚性连接，连接两个玩家
      */
-    createRigidConnection(duration) {
+    createRigidConnection(duration, player1Id, player2Id, currentTurn) {
         if (this.players.length < 2) return;
-        
+        player1Id = player1Id || 1;
+        player2Id = player2Id || 2;
+
         // 如果已经有约束，先移除
         if (this.rigidConstraint) {
             Matter.World.remove(this.world, this.rigidConstraint);
         }
-        
-        // 计算当前两个玩家之间的距离
-        const dx = this.players[1].position.x - this.players[0].position.x;
-        const dy = this.players[1].position.y - this.players[0].position.y;
+
+        const body1 = this.getPlayer(player1Id);
+        const body2 = this.getPlayer(player2Id);
+        if (!body1 || !body2) return;
+
+        const dx = body2.position.x - body1.position.x;
+        const dy = body2.position.y - body1.position.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        // 创建刚性约束
+
         this.rigidConstraint = Matter.Constraint.create({
-            bodyA: this.players[0],
-            bodyB: this.players[1],
-            stiffness: 0.95, // 高刚度保证刚性
-            length: distance, // 使用当前实际距离
+            bodyA: body1,
+            bodyB: body2,
+            stiffness: 0.95,
+            length: distance,
             damping: 0.1
         });
-        
+
         Matter.World.add(this.world, this.rigidConstraint);
-        
-        // 添加到效果列表
+
         this.effects.push({
             type: 'rigid_constraint',
-            duration: duration
+            expiryRound: currentTurn + duration,
+            player1Id: player1Id,
+            player2Id: player2Id
         });
     }
 
     /**
      * 创建软绳约束
      */
-    createSoftRope(duration) {
+    createSoftRope(duration, player1Id, player2Id, currentTurn) {
         console.log('=== createSoftRope 被调用，duration:', duration);
         if (this.players.length < 2) return;
-        
-        // 计算并保存初始距离（原长）
-        const dx = this.players[1].position.x - this.players[0].position.x;
-        const dy = this.players[1].position.y - this.players[0].position.y;
+        player1Id = player1Id || 1;
+        player2Id = player2Id || 2;
+
+        const body1 = this.getPlayer(player1Id);
+        const body2 = this.getPlayer(player2Id);
+        if (!body1 || !body2) return;
+
+        const dx = body2.position.x - body1.position.x;
+        const dy = body2.position.y - body1.position.y;
         this.softRopeOriginalLength = Math.sqrt(dx * dx + dy * dy);
         this.isSoftRopeLocked = false;
-        
-        // 添加到效果列表
+
         const newEffect = {
             type: 'soft_rope',
-            duration: duration,
-            originalLength: this.softRopeOriginalLength
+            expiryRound: currentTurn + duration,
+            originalLength: this.softRopeOriginalLength,
+            player1Id: player1Id,
+            player2Id: player2Id
         };
         this.effects.push(newEffect);
-        console.log('添加软绳约束到 effects，当前 effects:', this.effects.map(e => ({ type: e.type, duration: e.duration })));
     }
 
     createArena() {
@@ -357,12 +358,14 @@ class PhysicsEngine {
         this.effects.forEach(effect => {
             // 处理软绳约束
             if (effect.type === 'soft_rope' && this.players.length >= 2) {
-                // 如果任意一个玩家有定位锚，不处理软绳约束
-                const p1Anchored = this.isPlayerAnchored(1);
-                const p2Anchored = this.isPlayerAnchored(2);
+                const p1Id = effect.player1Id || 1;
+                const p2Id = effect.player2Id || 2;
+                const p1 = this.getPlayer(p1Id);
+                const p2 = this.getPlayer(p2Id);
+                if (!p1 || !p2) return;
+                const p1Anchored = this.isPlayerAnchored(p1Id);
+                const p2Anchored = this.isPlayerAnchored(p2Id);
                 if (!p1Anchored && !p2Anchored) {
-                    const p1 = this.players[0];
-                    const p2 = this.players[1];
                     const dx = p2.position.x - p1.position.x;
                     const dy = p2.position.y - p1.position.y;
                     const currentDist = Math.sqrt(dx * dx + dy * dy);

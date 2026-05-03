@@ -2,6 +2,7 @@ const GameUI = {
     game: null,
     lastTime: 0,
     gameStarted: false,
+    viewingTab: 0,
 
     init() {
         console.log('=== Game Initializing ===');
@@ -37,6 +38,26 @@ const GameUI = {
         this.game.initGame(mode);
         console.log('Game initialized with mode:', mode);
 
+        const is3P = mode === '3pvp';
+
+        // 显示/隐藏P3面板
+        const p3Status = document.getElementById('player3-status');
+        const p3Params = document.getElementById('player3-params');
+        const p3Tab = document.querySelector('.tab-p3');
+        const playerTabs = document.getElementById('player-tabs');
+
+        if (is3P) {
+            if (p3Status) p3Status.classList.remove('hidden');
+            if (p3Params) p3Params.classList.remove('hidden');
+            if (p3Tab) p3Tab.classList.remove('hidden');
+            if (playerTabs) playerTabs.classList.remove('hidden');
+        } else {
+            if (p3Status) p3Status.classList.add('hidden');
+            if (p3Params) p3Params.classList.add('hidden');
+            if (p3Tab) p3Tab.classList.add('hidden');
+            if (playerTabs) playerTabs.classList.add('hidden');
+        }
+
         const p2Name = document.querySelector('#player2-status .player-name');
         if (p2Name) {
             p2Name.textContent = mode === 'pve' ? 'AI 对手' : '玩家 2';
@@ -47,6 +68,7 @@ const GameUI = {
             p2Avatar.textContent = mode === 'pve' ? 'AI' : 'P2';
         }
 
+        this.viewingTab = 0;
         this.gameStarted = true;
         this.updateUI();
         this.handleCurrentPhase();
@@ -63,10 +85,17 @@ const GameUI = {
             this.startGame('pve');
         });
 
+        document.getElementById('mode-3pvp-btn').addEventListener('click', () => {
+            this.startGame('3pvp');
+        });
+
         document.getElementById('end-turn-btn').addEventListener('click', () => {
             console.log('End turn button clicked');
             if (this.game.aimingState.active) {
                 this.game.cancelAim();
+                this.updateUI();
+            } else if (this.game.targetingState.active) {
+                this.game.cancelTarget();
                 this.updateUI();
             } else {
                 this.endTurn();
@@ -87,16 +116,16 @@ const GameUI = {
             console.log('Cards area clicked');
             if (this.game.isAITurn()) return;
             if (this.game.aimingState.active) return;
-            if (this.game.turnPhase !== 'play') return; // 只能在出牌阶段出牌
+            if (this.game.targetingState.active) return;
+            if (this.game.turnPhase !== 'play') return;
+            // 只能操作当前回合玩家的手牌
+            if (this.viewingTab !== this.game.currentPlayerIndex) return;
             const card = e.target.closest('.card');
             if (card && !card.classList.contains('disabled')) {
                 const index = parseInt(card.dataset.index);
                 const currentPlayer = this.game.players[this.game.currentPlayerIndex];
-                console.log('Playing card index:', index, 'for player:', currentPlayer);
                 const result = this.game.playCard(currentPlayer.id, index);
-                if (result === 'aiming') {
-                    this.updateUI();
-                } else if (result) {
+                if (result) {
                     this.updateUI();
                 }
             }
@@ -104,14 +133,22 @@ const GameUI = {
 
         const canvas = document.getElementById('game-canvas');
         canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = 800 / rect.width;
+            const scaleY = 600 / rect.height;
+            const x = (e.clientX - rect.left) * scaleX - 400;
+            const y = (e.clientY - rect.top) * scaleY - 300;
+
             if (this.game.aimingState.active) {
-                const rect = canvas.getBoundingClientRect();
-                const scaleX = 800 / rect.width;
-                const scaleY = 600 / rect.height;
-                const x = (e.clientX - rect.left) * scaleX - 400;
-                const y = (e.clientY - rect.top) * scaleY - 300;
                 this.game.confirmAim(x, y);
                 this.updateUI();
+            } else if (this.game.targetingState.active) {
+                // 检查点击了哪个玩家
+                const clickedPlayer = this.findClickedPlayer(x, y);
+                if (clickedPlayer) {
+                    this.game.confirmTarget(clickedPlayer.id);
+                    this.updateUI();
+                }
             }
         });
 
@@ -157,9 +194,9 @@ const GameUI = {
             const cardEl = e.target.closest('.card');
             if (cardEl) {
                 const index = parseInt(cardEl.dataset.index);
-                const currentPlayer = this.game.players[this.game.currentPlayerIndex];
-                if (currentPlayer && currentPlayer.cards[index]) {
-                    this.previewCard(currentPlayer.cards[index]);
+                const player = this.game.players[this.viewingTab];
+                if (player && player.cards[index]) {
+                    this.previewCard(player.cards[index]);
                 }
             }
         });
@@ -171,13 +208,22 @@ const GameUI = {
         document.getElementById('confirm-discard-btn').addEventListener('click', () => {
             if (this.game.confirmDiscard()) {
                 document.getElementById('discard-modal').classList.add('hidden');
-                // 弃牌完成，进入下一阶段
                 this.game.advanceGamePhase();
                 if (this.game.isNewRound) {
                     this.game.drawCardsForAllPlayers();
                 }
+                this.viewingTab = this.game.currentPlayerIndex;
                 this.updateUI();
                 this.handleCurrentPhase();
+            }
+        });
+
+        // Tab切换
+        document.getElementById('player-tabs').addEventListener('click', (e) => {
+            const tab = e.target.closest('.tab-btn');
+            if (tab) {
+                const index = parseInt(tab.dataset.player);
+                this.switchTab(index);
             }
         });
     },
@@ -186,21 +232,22 @@ const GameUI = {
     handleCurrentPhase() {
         if (!this.gameStarted) return;
 
+        this.viewingTab = this.game.currentPlayerIndex;
+
         if (this.game.isAITurn()) {
             this.triggerAITurn();
             return;
         }
 
         if (this.game.turnPhase === 'discard') {
-            // 弃牌阶段，检查是否需要弃牌
             const needDiscard = this.game.checkNeedDiscard(this.game.currentPlayerIndex);
             if (needDiscard > 0) {
                 this.game.startDiscardPhase(this.game.currentPlayerIndex, needDiscard, 'phaseDiscard');
                 this.showDiscardModal();
                 return;
             } else {
-                // 不需要弃牌，直接进入出牌阶段
                 this.game.advanceGamePhase();
+                this.viewingTab = this.game.currentPlayerIndex;
                 this.updateUI();
             }
         }
@@ -229,6 +276,7 @@ const GameUI = {
         this.updatePlayerEffects();
         this.updatePhysicsParamsPanel();
         this.updateCardParamsPanel();
+        this.updateTabButtons();
 
         const endTurnBtn = document.getElementById('end-turn-btn');
         const cardsHand = document.getElementById('cards-hand');
@@ -246,6 +294,8 @@ const GameUI = {
 
             if (this.game.aimingState.active) {
                 endTurnBtn.textContent = '取消瞄准';
+            } else if (this.game.targetingState.active) {
+                endTurnBtn.textContent = '取消选择';
             } else {
                 endTurnBtn.textContent = '完成出牌';
             }
@@ -543,21 +593,51 @@ const GameUI = {
 
     endTurn() {
         console.log('Ending turn...');
-        
+
         if (this.game.turnPhase === 'discard') {
-            // 已经在弃牌阶段的话，直接处理
             this.handleCurrentPhase();
         } else {
-            // 出牌阶段结束，前进
             this.game.advanceGamePhase();
-            
             if (this.game.isNewRound) {
                 this.game.drawCardsForAllPlayers();
             }
-            
+            this.viewingTab = this.game.currentPlayerIndex;
             this.updateUI();
             this.handleCurrentPhase();
         }
+    },
+
+    findClickedPlayer(x, y) {
+        const CLICK_RADIUS = 45;
+        for (let i = 0; i < this.game.players.length; i++) {
+            const player = this.game.players[i];
+            if (player.eliminated || player.id === this.game.targetingState.playerId) continue;
+            const physics = this.game.physics.getPlayer(player.id);
+            if (!physics) continue;
+            const dx = x - physics.position.x;
+            const dy = y - physics.position.y;
+            if (Math.sqrt(dx * dx + dy * dy) <= CLICK_RADIUS) {
+                return player;
+            }
+        }
+        return null;
+    },
+
+    switchTab(index) {
+        this.viewingTab = index;
+        this.updateHand();
+        this.updateTabButtons();
+    },
+
+    updateTabButtons() {
+        const tabs = document.querySelectorAll('#player-tabs .tab-btn');
+        tabs.forEach((tab, i) => {
+            if (i === this.viewingTab) {
+                tab.classList.add('active');
+            } else {
+                tab.classList.remove('active');
+            }
+        });
     },
     
     previewCard(card) {
@@ -598,36 +678,31 @@ const GameUI = {
             console.error('cards-hand element not found!');
             return;
         }
-        
-        container.innerHTML = '';
-        console.log('Cleared container');
 
-        const currentPlayer = this.game.players[this.game.currentPlayerIndex];
-        console.log('Current player index:', this.game.currentPlayerIndex);
-        console.log('Current player:', currentPlayer);
-        
-        if (!currentPlayer || currentPlayer.eliminated) {
-            console.log('Player eliminated or not found');
+        container.innerHTML = '';
+
+        const player = this.game.players[this.viewingTab];
+        if (!player || player.eliminated) {
+            container.innerHTML = '<div style="color: white; padding: 10px;">该玩家已被淘汰</div>';
             return;
         }
 
-        console.log('Number of cards:', currentPlayer.cards.length);
-        
-        if (currentPlayer.cards.length === 0) {
+        if (player.cards.length === 0) {
             container.innerHTML = '<div style="color: white; padding: 10px;">没有手牌</div>';
             return;
         }
 
-        currentPlayer.cards.forEach((card, index) => {
-            console.log('Rendering card', index, card.name);
+        const isCurrentTurn = this.viewingTab === this.game.currentPlayerIndex;
+
+        player.cards.forEach((card, index) => {
             const cardEl = document.createElement('div');
             cardEl.className = 'card';
             cardEl.dataset.index = index;
             cardEl.dataset.type = card.type;
             cardEl.dataset.rarity = card.rarity;
             cardEl.dataset.cost = card.cost;
-            const noCharge = card.id === 'electromagnetic_cannon' && (!currentPlayer.charge || currentPlayer.charge === 0);
-            if (currentPlayer.energy < card.cost || this.game.turnPhase !== 'play' || noCharge) {
+            const noCharge = card.id === 'electromagnetic_cannon' && (!player.charge || player.charge === 0);
+            if (!isCurrentTurn || player.energy < card.cost || this.game.turnPhase !== 'play' || noCharge) {
                 cardEl.classList.add('disabled');
             }
             cardEl.innerHTML = `
@@ -637,8 +712,6 @@ const GameUI = {
             `;
             container.appendChild(cardEl);
         });
-        
-        console.log('Cards rendered:', container.children.length);
     },
 
     updateTurnIndicator() {

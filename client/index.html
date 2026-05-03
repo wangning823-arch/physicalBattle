@@ -22,6 +22,11 @@
                     <strong style="color: #e0e0e0;">人机对战</strong>
                     <span style="color: #aaa; font-size: 12px;">挑战AI对手</span>
                 </button>
+                <button id="mode-3pvp-btn" class="mode-btn">
+                    <span style="font-size: 32px;">🎮</span>
+                    <strong style="color: #e0e0e0;">三人对战</strong>
+                    <span style="color: #aaa; font-size: 12px;">三人同屏竞技</span>
+                </button>
             </div>
         </div>
     </div>
@@ -68,6 +73,23 @@
                 <span class="energy-text">10 / 10</span>
                 <div id="player2-effects" class="player-effects"></div>
                 <div id="player2-heat-engine" class="heat-engine-display"></div>
+            </div>
+
+            <div id="player3-status" class="player-status player3 hidden">
+                <div class="player-header">
+                    <div class="player-avatar p3-avatar">P3</div>
+                    <div class="player-info">
+                        <span class="player-name">玩家 3</span>
+                        <span class="player-mass" id="p3-mass-hud">70 kg</span>
+                    </div>
+                </div>
+                <div class="energy-bar">
+                    <div class="energy-fill" style="width: 100%"></div>
+                    <div class="energy-segments"></div>
+                </div>
+                <span class="energy-text">10 / 10</span>
+                <div id="player3-effects" class="player-effects"></div>
+                <div id="player3-heat-engine" class="heat-engine-display"></div>
             </div>
         </div>
 
@@ -139,6 +161,25 @@
                             <span class="param-value" id="p2-distance">0</span>
                         </div>
                     </div>
+                    <div class="player-params player3-params hidden" id="player3-params">
+                        <h4>玩家 3</h4>
+                        <div class="param-item">
+                            <span class="param-label">位置 (x, y)</span>
+                            <span class="param-value" id="p3-position">(0, 0)</span>
+                        </div>
+                        <div class="param-item">
+                            <span class="param-label">速度 (x, y)</span>
+                            <span class="param-value" id="p3-velocity">(0, 0)</span>
+                        </div>
+                        <div class="param-item">
+                            <span class="param-label">质量</span>
+                            <span class="param-value" id="p3-mass">70 kg</span>
+                        </div>
+                        <div class="param-item">
+                            <span class="param-label">距中心距离</span>
+                            <span class="param-value" id="p3-distance">0</span>
+                        </div>
+                    </div>
                     
                     <div class="arena-params" id="arena-params">
                         <h4>场地物理参数</h4>
@@ -160,6 +201,11 @@
         </div>
 
         <div id="hand-container">
+            <div id="player-tabs" class="hidden">
+                <div class="tab-btn active" data-player="0">P1</div>
+                <div class="tab-btn" data-player="1">P2</div>
+                <div class="tab-btn tab-p3 hidden" data-player="2">P3</div>
+            </div>
             <div id="cards-area">
                 <div id="cards-hand"></div>
                 <div id="ai-thinking" style="display: none; align-items: center; justify-content: center; gap: 10px; color: #1E90FF; font-size: 18px; padding: 20px;">
