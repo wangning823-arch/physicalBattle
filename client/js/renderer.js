@@ -338,7 +338,7 @@ class Renderer {
 
     // ========== Player ==========
 
-    drawPlayer(player, hasShield, playerData = null, isInvisible = false) {
+    drawPlayer(player, hasShield, playerData = null, isInvisible = false, currentTurn = 1) {
         const ctx = this.ctx;
         const x = this.centerX + player.position.x;
         const y = this.centerY + player.position.y;
@@ -667,8 +667,7 @@ class Renderer {
         if (playerData && playerData.effects) {
             const anchorEffect = playerData.effects.find(e => e.type === 'anchor');
             if (anchorEffect) {
-                const elapsed = (playerData.turnsPlayed || 0) - anchorEffect.startTurn;
-                const remaining = anchorEffect.remainingTurns - elapsed;
+                const remaining = Math.max(0, (anchorEffect.expiryRound || currentTurn) - currentTurn);
                 const yOff = -95 - extraIndicators * 22;
                 ctx.save();
                 ctx.globalAlpha = 0.8;
@@ -1924,7 +1923,7 @@ class Renderer {
                     playerData = gameState.players.find(gp => gp.id === p.playerId);
                 }
                 const isInvisible = gameState.quantumInvisible && gameState.quantumInvisible[p.playerId];
-                this.drawPlayer(p, gameState.shields && gameState.shields[p.playerId], playerData, isInvisible);
+                this.drawPlayer(p, gameState.shields && gameState.shields[p.playerId], playerData, isInvisible, gameState.turn || 1);
             });
         }
 

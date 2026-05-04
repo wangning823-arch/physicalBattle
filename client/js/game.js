@@ -795,6 +795,7 @@ class Game {
                 }
 
                 this.physics.updateEffectsTurn(this.currentTurn);
+                this.cleanupAllPlayerEffects();
                 for (let i = 0; i < this.players.length; i++) {
                     const player = this.players[i];
                     if (!player.eliminated) {
@@ -951,28 +952,40 @@ class Game {
         player.heatEngine = null;
     }
 
+    // 每回合开始时统一清理所有玩家的过期效果，消除时序不对称
+    cleanupAllPlayerEffects() {
+        for (const player of this.players) {
+            if (!player.effects || player.effects.length === 0) continue;
+
+            player.effects = player.effects.filter(effect => {
+                if (effect.expiryRound !== undefined && this.currentTurn >= effect.expiryRound) {
+                    if (effect.type === 'anchor') {
+                        player.anchorPosition = null;
+                        const physics = this.physics.getPlayer(player.id);
+                        if (physics) {
+                            physics._anchorPos = null;
+                            Matter.Body.setStatic(physics, false);
+                            physics.collisionFilter.mask = 0x0005;
+                        }
+                    }
+                    return false;
+                }
+                return true;
+            });
+
+            const hasMassEffect = player.effects.some(e => e.type === 'massChange');
+            if (!hasMassEffect && player.originalMass) {
+                this.physics.setPlayerMass(player.id, player.originalMass);
+                player.originalMass = null;
+            }
+        }
+    }
+
     processPlayerEffects(player) {
         if (!player.effects || player.effects.length === 0) return;
 
-        // 使用绝对回合数判断效果是否过期
-        player.effects = player.effects.filter(effect => {
-            if (effect.expiryRound !== undefined && this.currentTurn >= effect.expiryRound) {
-                // 效果过期，执行清理
-                if (effect.type === 'anchor') {
-                    player.anchorPosition = null;
-                    const physics = this.physics.getPlayer(player.id);
-                    if (physics) {
-                        physics._anchorPos = null;
-                        Matter.Body.setStatic(physics, false);
-                        physics.collisionFilter.mask = 0x0005;
-                    }
-                }
-                return false;
-            }
-            return true;
-        });
-
-        // 检查是否还有质量变化效果，没有则恢复原始质量
+        // 过期检查已移至 updateEffectsTurn（每回合开始时统一清理），消除时序不对称
+        // 这里仅保留质量恢复作为安全网
         const hasMassEffect = player.effects.some(e => e.type === 'massChange');
         if (!hasMassEffect && player.originalMass) {
             this.physics.setPlayerMass(player.id, player.originalMass);

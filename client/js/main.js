@@ -89,6 +89,14 @@ const GameUI = {
             this.startGame('3pvp');
         });
 
+        document.getElementById('changelog-btn').addEventListener('click', () => {
+            document.getElementById('changelog-modal').classList.remove('hidden');
+        });
+
+        document.getElementById('close-changelog-btn').addEventListener('click', () => {
+            document.getElementById('changelog-modal').classList.add('hidden');
+        });
+
         document.getElementById('end-turn-btn').addEventListener('click', () => {
             console.log('End turn button clicked');
             if (this.game.aimingState.active) {

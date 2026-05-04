@@ -28,6 +28,50 @@
                     <span style="color: #aaa; font-size: 12px;">三人同屏竞技</span>
                 </button>
             </div>
+            <button id="changelog-btn" style="margin-top: 30px; padding: 10px 24px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px; color: #888; font-size: 13px; cursor: pointer; transition: all 0.2s;">📋 更新日志</button>
+        </div>
+    </div>
+
+    <div id="changelog-modal" class="hidden">
+        <div class="modal-content changelog-content">
+            <h2>📋 更新日志</h2>
+            <div class="changelog-scroll">
+                <div class="changelog-version">
+                    <h3>v1.3 <span class="changelog-date">2026-05-03</span></h3>
+                    <ul>
+                        <li>新增 3人PVP 模式，支持三人同屏竞技</li>
+                        <li>修复效果持续回合数提前失效问题</li>
+                    </ul>
+                </div>
+                <div class="changelog-version">
+                    <h3>v1.2 <span class="changelog-date">2026-05-02</span></h3>
+                    <ul>
+                        <li>重构卡牌类型分类系统</li>
+                        <li>新增磁场卡牌（洛伦兹力偏转）</li>
+                        <li>加入 AI 对手（人机对战模式）</li>
+                    </ul>
+                </div>
+                <div class="changelog-version">
+                    <h3>v1.1 <span class="changelog-date">2026-05-01</span></h3>
+                    <ul>
+                        <li>新增动量守恒卡牌</li>
+                        <li>新增电磁炮卡牌</li>
+                        <li>新增辐射与布朗运动卡牌</li>
+                        <li>调整热机与牌组数值平衡</li>
+                    </ul>
+                </div>
+                <div class="changelog-version">
+                    <h3>v1.0 <span class="changelog-date">2026-04-30</span></h3>
+                    <ul>
+                        <li>初始版本发布</li>
+                        <li>物理引擎：Matter.js 集成</li>
+                        <li>竞技场背景升级与卡牌飞行轨迹动画</li>
+                        <li>热机状态显示与爆炸特效</li>
+                        <li>质能方程、软绳约束等卡牌</li>
+                    </ul>
+                </div>
+            </div>
+            <button id="close-changelog-btn">关闭</button>
         </div>
     </div>
 

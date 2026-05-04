@@ -968,3 +968,122 @@ body {
     color: #22c55e;
     border-color: rgba(34, 197, 94, 0.3);
 }
+
+/* 更新日志 */
+#changelog-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+#changelog-btn:hover {
+    border-color: #1E90FF;
+    color: #1E90FF;
+}
+
+.changelog-content {
+    min-width: 500px;
+    max-width: 600px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+}
+
+.changelog-content h2 {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.changelog-scroll {
+    flex: 1;
+    overflow-y: auto;
+    margin-bottom: 20px;
+    padding-right: 8px;
+}
+
+.changelog-scroll::-webkit-scrollbar {
+    width: 6px;
+}
+
+.changelog-scroll::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+}
+
+.changelog-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 215, 0, 0.3);
+    border-radius: 3px;
+}
+
+.changelog-version {
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.changelog-version:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.changelog-version h3 {
+    color: #FFD700;
+    font-size: 16px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.changelog-date {
+    font-size: 12px;
+    color: #888;
+    font-weight: normal;
+}
+
+.changelog-version ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.changelog-version li {
+    padding: 4px 0 4px 16px;
+    position: relative;
+    color: #ccc;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.changelog-version li::before {
+    content: '•';
+    position: absolute;
+    left: 0;
+    color: #1E90FF;
+}
+
+#close-changelog-btn {
+    display: block;
+    margin: 0 auto;
+    padding: 10px 40px;
+    font-size: 15px;
+    background: linear-gradient(145deg, #1E90FF, #0066cc);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+#close-changelog-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 5px 20px rgba(30, 144, 255, 0.5);
+}
