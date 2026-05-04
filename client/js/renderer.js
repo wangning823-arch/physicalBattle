@@ -1915,6 +1915,13 @@ class Renderer {
             playersToDraw = gameState.physicsPlayers;
         }
         if (playersToDraw && playersToDraw.length > 0) {
+            playersToDraw = playersToDraw.filter(p => {
+                if (gameState.players) {
+                    const pd = gameState.players.find(gp => gp.id === p.playerId);
+                    if (pd && pd.eliminated) return false;
+                }
+                return true;
+            });
             playersToDraw.forEach(p => {
                 let playerData = null;
                 if (gameState.playersData) {

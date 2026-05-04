@@ -1061,6 +1061,7 @@ class Game {
         this.players.forEach(player => {
             if (!player.eliminated && this.physics.checkBoundary(player.id)) {
                 player.eliminated = true;
+                this.physics.removePlayer(player.id);
             }
         });
         const alive = this.players.filter(p => !p.eliminated);

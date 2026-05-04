@@ -480,6 +480,22 @@ class PhysicsEngine {
         return this.players;
     }
 
+    removePlayer(playerId) {
+        const player = this.getPlayer(playerId);
+        if (!player) return;
+        Matter.World.remove(this.world, player);
+        this.players = this.players.filter(p => p.playerId !== playerId);
+        // 移除该玩家相关的约束
+        if (this.rigidConstraint) {
+            const c = this.rigidConstraint;
+            if ((c.bodyA && c.bodyA.playerId === playerId) || (c.bodyB && c.bodyB.playerId === playerId)) {
+                Matter.World.remove(this.world, this.rigidConstraint);
+                this.rigidConstraint = null;
+            }
+        }
+        this.anchoredPlayerIds = this.anchoredPlayerIds.filter(id => id !== playerId);
+    }
+
     reset() {
         // 移除刚性约束
         if (this.rigidConstraint) {

@@ -2,6 +2,7 @@ const GameUI = {
     game: null,
     lastTime: 0,
     gameStarted: false,
+    gameLoopRunning: false,
     viewingTab: 0,
 
     init() {
@@ -33,6 +34,12 @@ const GameUI = {
         const modal = document.getElementById('mode-select-modal');
         if (modal) {
             modal.classList.add('hidden');
+        }
+
+        // 隐藏上一局的结算弹窗
+        const gameOverModal = document.getElementById('game-over-modal');
+        if (gameOverModal) {
+            gameOverModal.classList.add('hidden');
         }
 
         this.game.initGame(mode);
@@ -70,6 +77,7 @@ const GameUI = {
 
         this.viewingTab = 0;
         this.gameStarted = true;
+        this.gameLoopRunning = true;
         this.updateUI();
         this.handleCurrentPhase();
         this.gameLoop();
@@ -862,6 +870,8 @@ const GameUI = {
     },
 
     gameLoop(currentTime = 0) {
+        if (!this.gameLoopRunning) return;
+
         try {
             const deltaTime = currentTime - this.lastTime;
             this.lastTime = currentTime;
@@ -877,15 +887,16 @@ const GameUI = {
             this.updatePhysicsParamsPanel();
 
             if (this.game.state === GAME_STATES.GAME_OVER) {
+                this.gameLoopRunning = false;
                 const alive = this.game.players.filter(p => !p.eliminated);
                 if (alive.length === 1 || alive.length === 0) {
                     this.showGameOver(alive[0] || { id: 0 });
                 }
+                return;
             }
         } catch (e) {
             console.error('Game loop error:', e);
         }
-        // finally 确保无论是否出错，游戏循环都不会中断
         requestAnimationFrame((time) => this.gameLoop(time));
     }
 };
