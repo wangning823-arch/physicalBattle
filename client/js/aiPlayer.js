@@ -212,6 +212,23 @@ class AIPlayer {
                 // 自己带电时风险较高
                 if (player.charge !== 0) score -= 10;
                 break;
+            case 'entropy_increase':
+                score = 50;
+                // 对方手牌多时更有价值（打乱对方好牌）
+                if (targetPlayer && targetPlayer.cards.length > player.cards.length) score += 20;
+                // 对方手牌少时价值降低
+                if (targetPlayer && targetPlayer.cards.length < player.cards.length) score -= 10;
+                break;
+            case 'high_energy_radiation':
+                score = 60;
+                // 距离近时更容易命中锥形范围
+                if (distance < 200) score += 15;
+                // 对手在场地边缘时更有价值（更容易推出去）
+                if (targetPhysics) {
+                    const targetDistFromCenter = Math.sqrt(targetPhysics.position.x ** 2 + targetPhysics.position.y ** 2);
+                    if (targetDistFromCenter > GAME_CONFIG.ARENA_RADIUS * 0.6) score += 15;
+                }
+                break;
             default:
                 score = 40;
         }
@@ -331,6 +348,17 @@ class AIPlayer {
                 return {
                     x: selfPhysics.position.x + (toTargetDir.x * cos - toTargetDir.y * sin) * 400,
                     y: selfPhysics.position.y + (toTargetDir.x * sin + toTargetDir.y * cos) * 400
+                };
+            }
+
+            case 'high_energy_radiation': {
+                // 瞄准对手方向，非常精确（锥角只有10度）
+                const spread = (Math.random() - 0.5) * 0.05;
+                const cos = Math.cos(spread);
+                const sin = Math.sin(spread);
+                return {
+                    x: selfPhysics.position.x + (toTargetDir.x * cos - toTargetDir.y * sin) * 300,
+                    y: selfPhysics.position.y + (toTargetDir.x * sin + toTargetDir.y * cos) * 300
                 };
             }
 

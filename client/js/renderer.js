@@ -930,6 +930,100 @@ class Renderer {
                 ctx.textBaseline = 'middle';
                 ctx.fillText('🛡️', x, y);
 
+            } else if (effect.type === 'highEnergyRadiation') {
+                // 高能辐射光束 - 锥形恒力场，起点跟随施法者
+                let srcX, srcY;
+                if (players) {
+                    const owner = players.find(p => p.playerId === effect.ownerId);
+                    if (owner) {
+                        srcX = this.centerX + owner.position.x;
+                        srcY = this.centerY + owner.position.y;
+                    } else {
+                        srcX = this.centerX + effect.x;
+                        srcY = this.centerY + effect.y;
+                    }
+                } else {
+                    srcX = this.centerX + effect.x;
+                    srcY = this.centerY + effect.y;
+                }
+                const angle = effect.angle;
+                const halfAngle = effect.coneHalfAngle;
+                const beamLength = 500;
+                const seed = effect._seed || 14444;
+
+                ctx.save();
+
+                // 锥形区域半透明填充
+                ctx.beginPath();
+                ctx.moveTo(srcX, srcY);
+                ctx.arc(srcX, srcY, beamLength, angle - halfAngle, angle + halfAngle);
+                ctx.closePath();
+                const grad = ctx.createRadialGradient(srcX, srcY, 0, srcX, srcY, beamLength);
+                grad.addColorStop(0, 'rgba(255,255,200,0.25)');
+                grad.addColorStop(0.3, 'rgba(255,220,100,0.15)');
+                grad.addColorStop(0.7, 'rgba(255,180,50,0.08)');
+                grad.addColorStop(1, 'rgba(255,150,0,0)');
+                ctx.fillStyle = grad;
+                ctx.fill();
+
+                // 锥形边界线
+                ctx.strokeStyle = 'rgba(255,220,100,0.3)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(srcX, srcY);
+                ctx.lineTo(srcX + Math.cos(angle - halfAngle) * beamLength, srcY + Math.sin(angle - halfAngle) * beamLength);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(srcX, srcY);
+                ctx.lineTo(srcX + Math.cos(angle + halfAngle) * beamLength, srcY + Math.sin(angle + halfAngle) * beamLength);
+                ctx.stroke();
+
+                // 中心亮线
+                ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+                ctx.lineWidth = 3;
+                ctx.shadowColor = '#FFD700';
+                ctx.shadowBlur = 15;
+                ctx.beginPath();
+                ctx.moveTo(srcX, srcY);
+                ctx.lineTo(srcX + Math.cos(angle) * beamLength, srcY + Math.sin(angle) * beamLength);
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                // 流动光粒子
+                const rng = _seededRandom(seed);
+                const t = Date.now() / 1000;
+                for (let i = 0; i < 10; i++) {
+                    const baseDist = rng() * beamLength;
+                    const anim = (t * 200 + rng() * beamLength) % beamLength;
+                    const spreadAngle = angle + (rng() - 0.5) * halfAngle * 2;
+                    const px = srcX + Math.cos(spreadAngle) * anim;
+                    const py = srcY + Math.sin(spreadAngle) * anim;
+                    const sz = 1.5 + rng() * 2;
+                    const alpha = 0.7 * (1 - anim / beamLength);
+                    ctx.beginPath();
+                    ctx.arc(px, py, sz, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255,255,200,${alpha})`;
+                    ctx.fill();
+                }
+
+                // 源点发光
+                ctx.beginPath();
+                ctx.arc(srcX, srcY, 12 + Math.sin(t * 6) * 3, 0, Math.PI * 2);
+                const srcGrad = ctx.createRadialGradient(srcX, srcY, 0, srcX, srcY, 15);
+                srcGrad.addColorStop(0, 'rgba(255,255,255,0.9)');
+                srcGrad.addColorStop(0.5, 'rgba(255,220,100,0.5)');
+                srcGrad.addColorStop(1, 'rgba(255,180,0,0)');
+                ctx.fillStyle = srcGrad;
+                ctx.fill();
+
+                // ☀️ 图标
+                ctx.font = '18px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('☀️', srcX, srcY);
+
+                ctx.restore();
+
             } else if (effect.type === 'magneticField') {
                 // 磁场 - 全场磁感线 + 旋转粒子
                 ctx.save();

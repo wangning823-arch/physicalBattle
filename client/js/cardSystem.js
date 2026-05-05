@@ -262,6 +262,28 @@ const CARDS_DATABASE = [
         formula: 'F = qv × B',
         effect: { duration: 2, strength: 0.15 },
         rarity: 'rare'
+    },
+    {
+        id: 'entropy_increase',
+        name: '熵增定律',
+        type: CARD_TYPES.FORCE,
+        cost: 4,
+        icon: '🔀',
+        description: '将双方手牌混合后随机重新分配',
+        formula: 'ΔS = Q/T',
+        effect: { targetEnemy: true },
+        rarity: 'epic'
+    },
+    {
+        id: 'high_energy_radiation',
+        name: '高能辐射',
+        type: CARD_TYPES.LIGHT,
+        cost: 3,
+        icon: '☀️',
+        description: '向瞄准方向发射高能辐射光束，对范围内敌人持续施加恒力，持续2回合',
+        formula: 'F = hν/c · σ',
+        effect: { needsAim: true, targetEnemy: true, duration: 2, forceStrength: 0.01, coneHalfAngle: 5 },
+        rarity: 'rare'
     }
 ];
 
@@ -298,7 +320,9 @@ class CardSystem {
             'brownian_motion': 12,
             'electromagnetic_cannon': 7,
             'momentum_conservation': 10,
-            'magnetic_field': 8
+            'magnetic_field': 8,
+            'entropy_increase': 6,
+            'high_energy_radiation': 8
         };
 
         this.deck = [];

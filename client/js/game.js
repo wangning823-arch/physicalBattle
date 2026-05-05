@@ -564,9 +564,9 @@ class Game {
                 // 质能方程：质量降低50%，获得2点能量（可超上限）
                 if (selfPlayer && selfPhysics) {
                     const currentMass = this.physics.getPlayer(playerId)?.mass || PLAYER_CONFIG.MASS;
-                    const originalMass = selfPlayer.originalMass || PLAYER_CONFIG.MASS;
-                    if (!selfPlayer.originalMass) selfPlayer.originalMass = originalMass;
-                    const newMass = originalMass * card.effect.massMultiplier;
+                    if (!selfPlayer.originalMass) selfPlayer.originalMass = PLAYER_CONFIG.MASS;
+                    // 基于当前质量计算，可叠加
+                    const newMass = currentMass * card.effect.massMultiplier;
                     this.physics.setPlayerMass(playerId, newMass);
                     // 能量超过上限也保留
                     selfPlayer.energy += card.effect.energyGain;
@@ -574,7 +574,7 @@ class Game {
                         type: 'massChange',
                         multiplier: card.effect.massMultiplier,
                         expiryRound: this.currentTurn + card.effect.duration,
-                        originalMass: originalMass
+                        currentMass: newMass
                     });
                     // 特效
                     this.physics.addTempEffect({
@@ -632,6 +632,34 @@ class Game {
                             life: 1000,
                             maxLife: 1000,
                             _seed: Date.now() + 12345
+                        });
+                    }
+                }
+                break;
+            case 'entropy_increase':
+                // 熵增定律：混合双方手牌后随机重新分配
+                if (targetPlayer) {
+                    const pool = [...selfPlayer.cards, ...targetPlayer.cards];
+                    // Fisher-Yates 洗牌
+                    for (let i = pool.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [pool[i], pool[j]] = [pool[j], pool[i]];
+                    }
+                    const selfCount = Math.ceil(pool.length / 2);
+                    selfPlayer.cards = pool.slice(0, selfCount).sort((a, b) => a.cost - b.cost);
+                    targetPlayer.cards = pool.slice(selfCount).sort((a, b) => a.cost - b.cost);
+                    // 特效
+                    if (selfPhysics && targetPhysics) {
+                        this.physics.addTempEffect({
+                            type: 'card_fly',
+                            startX: selfPhysics.position.x,
+                            startY: selfPhysics.position.y,
+                            endX: targetPhysics.position.x,
+                            endY: targetPhysics.position.y,
+                            cardType: 'force',
+                            life: 600,
+                            maxLife: 600,
+                            _seed: Date.now() + 4444
                         });
                     }
                 }
@@ -717,6 +745,27 @@ class Game {
                             maxLife: 300,
                             _seed: Date.now() + 11111
                         });
+
+                        // 电磁炮反冲导致质量降低90%，持续2回合，可叠加
+                        const currentMass = this.physics.getPlayer(playerId)?.mass || PLAYER_CONFIG.MASS;
+                        if (!selfPlayer.originalMass) selfPlayer.originalMass = PLAYER_CONFIG.MASS;
+                        const newMass = currentMass * 0.9;
+                        this.physics.setPlayerMass(playerId, newMass);
+                        selfPlayer.effects.push({
+                            type: 'massChange',
+                            multiplier: 0.9,
+                            expiryRound: this.currentTurn + 2,
+                            currentMass: newMass
+                        });
+                        this.physics.addTempEffect({
+                            type: 'mass_change',
+                            x: selfPhysics.position.x,
+                            y: selfPhysics.position.y,
+                            massMultiplier: 0.9,
+                            life: 600,
+                            maxLife: 600,
+                            _seed: Date.now() + 11112
+                        });
                     }
                 }
                 break;
@@ -728,6 +777,38 @@ class Game {
                     expiryRound: this.currentTurn + card.effect.duration,
                     _seed: Date.now() + 13333
                 });
+                break;
+            case 'high_energy_radiation':
+                // 高能辐射：向瞄准方向发射持续恒力光束
+                if (selfPhysics && aimTarget) {
+                    const dx = aimTarget.x - selfPhysics.position.x;
+                    const dy = aimTarget.y - selfPhysics.position.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 0) {
+                        const angle = Math.atan2(dy, dx);
+                        this.physics.addEffect({
+                            type: 'highEnergyRadiation',
+                            x: selfPhysics.position.x,
+                            y: selfPhysics.position.y,
+                            angle: angle,
+                            forceStrength: card.effect.forceStrength,
+                            coneHalfAngle: card.effect.coneHalfAngle * Math.PI / 180,
+                            ownerId: playerId,
+                            expiryRound: this.currentTurn + card.effect.duration,
+                            _seed: Date.now() + 14444
+                        });
+                        // 发射特效
+                        this.physics.addTempEffect({
+                            type: 'charge_apply',
+                            x: selfPhysics.position.x,
+                            y: selfPhysics.position.y,
+                            charge: 1,
+                            life: 400,
+                            maxLife: 400,
+                            _seed: Date.now() + 14445
+                        });
+                    }
+                }
                 break;
         }
         this.cardSystem.discard(card);
@@ -973,10 +1054,15 @@ class Game {
                 return true;
             });
 
-            const hasMassEffect = player.effects.some(e => e.type === 'massChange');
-            if (!hasMassEffect && player.originalMass) {
+            const massEffects = player.effects.filter(e => e.type === 'massChange');
+            if (massEffects.length === 0 && player.originalMass) {
                 this.physics.setPlayerMass(player.id, player.originalMass);
                 player.originalMass = null;
+            } else if (massEffects.length > 0 && player.originalMass) {
+                // 用剩余效果的乘数链重算质量
+                let m = player.originalMass;
+                for (const e of massEffects) m *= e.multiplier;
+                this.physics.setPlayerMass(player.id, m);
             }
         }
     }
@@ -986,10 +1072,14 @@ class Game {
 
         // 过期检查已移至 updateEffectsTurn（每回合开始时统一清理），消除时序不对称
         // 这里仅保留质量恢复作为安全网
-        const hasMassEffect = player.effects.some(e => e.type === 'massChange');
-        if (!hasMassEffect && player.originalMass) {
+        const massEffects = player.effects.filter(e => e.type === 'massChange');
+        if (massEffects.length === 0 && player.originalMass) {
             this.physics.setPlayerMass(player.id, player.originalMass);
             player.originalMass = null;
+        } else if (massEffects.length > 0 && player.originalMass) {
+            let m = player.originalMass;
+            for (const e of massEffects) m *= e.multiplier;
+            this.physics.setPlayerMass(player.id, m);
         }
     }
 
@@ -1160,6 +1250,43 @@ class Game {
                     const B = magneticField.strength;
                     const q = player.charge;
                     Matter.Body.applyForce(physics, physics.position, { x: q * vy * B, y: -q * vx * B });
+                }
+            }
+
+            // ========== 高能辐射恒力 ==========
+            const radiationEffects = this.physics.effects.filter(e => e.type === 'highEnergyRadiation');
+            for (const rad of radiationEffects) {
+                // 起点跟随施法者当前位置，角度不变
+                const ownerPhysics = this.physics.getPlayer(rad.ownerId);
+                if (!ownerPhysics) continue;
+                const beamX = ownerPhysics.position.x;
+                const beamY = ownerPhysics.position.y;
+
+                for (let i = 0; i < this.players.length; i++) {
+                    const player = this.players[i];
+                    if (player.id === rad.ownerId || player.eliminated) continue;
+                    if (hasAnchor[i]) continue;
+                    if (player.quantumState) continue;
+                    const physics = this.physics.getPlayer(player.id);
+                    if (!physics) continue;
+
+                    // 计算目标相对于施法者当前位置的位置
+                    const relX = physics.position.x - beamX;
+                    const relY = physics.position.y - beamY;
+                    const targetAngle = Math.atan2(relY, relX);
+                    const angleDiff = targetAngle - rad.angle;
+
+                    // 规范化角度差到 [-PI, PI]
+                    let normalizedDiff = angleDiff;
+                    while (normalizedDiff > Math.PI) normalizedDiff -= Math.PI * 2;
+                    while (normalizedDiff < -Math.PI) normalizedDiff += Math.PI * 2;
+
+                    // 检查是否在锥形范围内
+                    if (Math.abs(normalizedDiff) <= rad.coneHalfAngle) {
+                        const fx = Math.cos(rad.angle) * rad.forceStrength;
+                        const fy = Math.sin(rad.angle) * rad.forceStrength;
+                        Matter.Body.applyForce(physics, physics.position, { x: fx, y: fy });
+                    }
                 }
             }
 

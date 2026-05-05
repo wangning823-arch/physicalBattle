@@ -37,6 +37,21 @@
             <h2>📋 更新日志</h2>
             <div class="changelog-scroll">
                 <div class="changelog-version">
+                    <h3>v1.4 <span class="changelog-date">2026-05-05</span></h3>
+                    <ul>
+                        <li>新增卡牌：熵增定律（史诗）— 混合双方手牌后随机重新分配</li>
+                        <li>新增卡牌：高能辐射（稀有）— 向瞄准方向发射锥形持续力场光束</li>
+                        <li>质能方程改为基于当前质量计算，可叠加</li>
+                        <li>电磁炮增加反冲效果：质量降低10%持续2回合，可叠加</li>
+                        <li>多重质量效果现在按乘数链重算</li>
+                        <li>淘汰玩家时从物理世界移除其碰撞体</li>
+                        <li>渲染时过滤已淘汰玩家</li>
+                        <li>新增更新日志功能</li>
+                        <li>修复游戏结束后返回菜单再开始新游戏时显示上一局结果的问题</li>
+                        <li>修复服务器不处理 query string 导致页面加载异常的问题</li>
+                    </ul>
+                </div>
+                <div class="changelog-version">
                     <h3>v1.3 <span class="changelog-date">2026-05-03</span></h3>
                     <ul>
                         <li>新增 3人PVP 模式，支持三人同屏竞技</li>
@@ -416,12 +431,12 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
-    <script src="js/constants.js?v=20260504"></script>
-    <script src="js/physics.js?v=20260504"></script>
-    <script src="js/cardSystem.js?v=20260504"></script>
-    <script src="js/renderer.js?v=20260504"></script>
-    <script src="js/aiPlayer.js?v=20260504"></script>
-    <script src="js/game.js?v=20260504"></script>
-    <script src="js/main.js?v=20260504"></script>
+    <script src="js/constants.js?v=20260505c"></script>
+    <script src="js/physics.js?v=20260505c"></script>
+    <script src="js/cardSystem.js?v=20260505c"></script>
+    <script src="js/renderer.js?v=20260505c"></script>
+    <script src="js/aiPlayer.js?v=20260505c"></script>
+    <script src="js/game.js?v=20260505c"></script>
+    <script src="js/main.js?v=20260505c"></script>
 </body>
 </html>
