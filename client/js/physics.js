@@ -9,9 +9,8 @@ class PhysicsEngine {
         this.players = [];
         this.effects = [];
         this.tempEffects = []; // 临时特效（短时间，如攻击特效）
-        this.rigidConstraint = null; // 保存刚性约束
-        this.softRopeOriginalLength = 0; // 软绳原长
-        this.isSoftRopeLocked = false; // 软绳是否已锁定
+        this.rigidConstraints = []; // 刚性约束列表 [{constraint, player1Id, player2Id, expiryRound}]
+        this.softRopes = []; // 软绳约束列表 [{originalLength, isLocked, player1Id, player2Id, expiryRound}]
         this.anchoredPlayerIds = []; // 有定位锚的玩家ID列表
         this.projectiles = []; // 电磁炮炮弹
         this._setupProjectileCollisions();
@@ -100,20 +99,17 @@ class PhysicsEngine {
             return true;
         });
         
-        // 检查是否有刚性约束效果需要处理
-        const rigidEffect = this.effects.find(e => e.type === 'rigid_constraint');
-        if (!rigidEffect && this.rigidConstraint) {
-            console.log('移除刚性约束，因为 effects 中没有了');
-            Matter.World.remove(this.world, this.rigidConstraint);
-            this.rigidConstraint = null;
-        }
-        
-        // 检查是否有软绳约束效果需要处理
-        const softRopeEffect = this.effects.find(e => e.type === 'soft_rope');
-        if (!softRopeEffect) {
-            this.softRopeOriginalLength = 0;
-            this.isSoftRopeLocked = false;
-        }
+        // 清理已过期的刚性约束
+        this.rigidConstraints = this.rigidConstraints.filter(rc => {
+            if (currentTurn >= rc.expiryRound) {
+                Matter.World.remove(this.world, rc.constraint);
+                return false;
+            }
+            return true;
+        });
+
+        // 清理已过期的软绳约束
+        this.softRopes = this.softRopes.filter(sr => currentTurn < sr.expiryRound);
     }
 
     /**
@@ -124,9 +120,14 @@ class PhysicsEngine {
         player1Id = player1Id || 1;
         player2Id = player2Id || 2;
 
-        // 如果已经有约束，先移除
-        if (this.rigidConstraint) {
-            Matter.World.remove(this.world, this.rigidConstraint);
+        // 检查同一对玩家是否已有约束，有则先移除
+        const existingIndex = this.rigidConstraints.findIndex(
+            c => (c.player1Id === player1Id && c.player2Id === player2Id) ||
+                 (c.player1Id === player2Id && c.player2Id === player1Id)
+        );
+        if (existingIndex !== -1) {
+            Matter.World.remove(this.world, this.rigidConstraints[existingIndex].constraint);
+            this.rigidConstraints.splice(existingIndex, 1);
         }
 
         const body1 = this.getPlayer(player1Id);
@@ -137,7 +138,7 @@ class PhysicsEngine {
         const dy = body2.position.y - body1.position.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
 
-        this.rigidConstraint = Matter.Constraint.create({
+        const constraint = Matter.Constraint.create({
             bodyA: body1,
             bodyB: body2,
             stiffness: 0.95,
@@ -145,7 +146,14 @@ class PhysicsEngine {
             damping: 0.1
         });
 
-        Matter.World.add(this.world, this.rigidConstraint);
+        Matter.World.add(this.world, constraint);
+
+        this.rigidConstraints.push({
+            constraint,
+            player1Id,
+            player2Id,
+            expiryRound: currentTurn + duration
+        });
 
         this.effects.push({
             type: 'rigid_constraint',
@@ -170,13 +178,29 @@ class PhysicsEngine {
 
         const dx = body2.position.x - body1.position.x;
         const dy = body2.position.y - body1.position.y;
-        this.softRopeOriginalLength = Math.sqrt(dx * dx + dy * dy);
-        this.isSoftRopeLocked = false;
+        const originalLength = Math.sqrt(dx * dx + dy * dy);
+
+        // 检查同一对玩家是否已有软绳，有则先移除
+        const existingIndex = this.softRopes.findIndex(
+            r => (r.player1Id === player1Id && r.player2Id === player2Id) ||
+                 (r.player1Id === player2Id && r.player2Id === player1Id)
+        );
+        if (existingIndex !== -1) {
+            this.softRopes.splice(existingIndex, 1);
+        }
+
+        this.softRopes.push({
+            originalLength,
+            isLocked: false,
+            player1Id,
+            player2Id,
+            expiryRound: currentTurn + duration
+        });
 
         const newEffect = {
             type: 'soft_rope',
             expiryRound: currentTurn + duration,
-            originalLength: this.softRopeOriginalLength,
+            originalLength: originalLength,
             player1Id: player1Id,
             player2Id: player2Id
         };
@@ -363,6 +387,14 @@ class PhysicsEngine {
                 const p1 = this.getPlayer(p1Id);
                 const p2 = this.getPlayer(p2Id);
                 if (!p1 || !p2) return;
+
+                // 从数组中找到对应的软绳数据
+                const ropeData = this.softRopes.find(
+                    r => (r.player1Id === p1Id && r.player2Id === p2Id) ||
+                         (r.player1Id === p2Id && r.player2Id === p1Id)
+                );
+                if (!ropeData) return;
+
                 const p1Anchored = this.isPlayerAnchored(p1Id);
                 const p2Anchored = this.isPlayerAnchored(p2Id);
                 if (!p1Anchored && !p2Anchored) {
@@ -371,13 +403,13 @@ class PhysicsEngine {
                     const currentDist = Math.sqrt(dx * dx + dy * dy);
 
                     // 锁定状态：超过原长时锁定（视觉和行为切换）
-                    if (currentDist > this.softRopeOriginalLength && !this.isSoftRopeLocked) {
-                        this.isSoftRopeLocked = true;
+                    if (currentDist > ropeData.originalLength && !ropeData.isLocked) {
+                        ropeData.isLocked = true;
                     }
 
                     // 超过原长时施加拉力（只阻止增大，不阻止缩小）
-                    if (currentDist > this.softRopeOriginalLength) {
-                        const overshoot = currentDist - this.softRopeOriginalLength;
+                    if (currentDist > ropeData.originalLength) {
+                        const overshoot = currentDist - ropeData.originalLength;
                         const forceMag = overshoot * 0.0008;
                         const nx = dx / currentDist;
                         const ny = dy / currentDist;
@@ -485,25 +517,26 @@ class PhysicsEngine {
         if (!player) return;
         Matter.World.remove(this.world, player);
         this.players = this.players.filter(p => p.playerId !== playerId);
-        // 移除该玩家相关的约束
-        if (this.rigidConstraint) {
-            const c = this.rigidConstraint;
-            if ((c.bodyA && c.bodyA.playerId === playerId) || (c.bodyB && c.bodyB.playerId === playerId)) {
-                Matter.World.remove(this.world, this.rigidConstraint);
-                this.rigidConstraint = null;
+        // 移除该玩家相关的刚性约束
+        this.rigidConstraints = this.rigidConstraints.filter(rc => {
+            if (rc.player1Id === playerId || rc.player2Id === playerId) {
+                Matter.World.remove(this.world, rc.constraint);
+                return false;
             }
-        }
+            return true;
+        });
+        // 移除该玩家相关的软绳约束
+        this.softRopes = this.softRopes.filter(sr =>
+            sr.player1Id !== playerId && sr.player2Id !== playerId
+        );
         this.anchoredPlayerIds = this.anchoredPlayerIds.filter(id => id !== playerId);
     }
 
     reset() {
-        // 移除刚性约束
-        if (this.rigidConstraint) {
-            Matter.World.remove(this.world, this.rigidConstraint);
-            this.rigidConstraint = null;
-        }
-        this.softRopeOriginalLength = 0;
-        this.isSoftRopeLocked = false;
+        // 移除所有刚性约束
+        this.rigidConstraints.forEach(rc => Matter.World.remove(this.world, rc.constraint));
+        this.rigidConstraints = [];
+        this.softRopes = [];
         // 移除玩家
         this.players.forEach(p => Matter.World.remove(this.world, p));
         this.players = [];
