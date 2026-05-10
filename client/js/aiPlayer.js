@@ -1,9 +1,53 @@
 class AIPlayer {
-    constructor(game) {
+    constructor(game, difficulty = 'normal') {
         this.game = game;
         this.isThinking = false;
-        this.thinkingDelay = 800;
-        this.cardPlayDelay = 500;
+        this.onCardPlayed = null;
+        this.onDiscardStart = null;
+
+        const DIFFICULTY = {
+            easy: {
+                thinkingDelay: 1000,
+                cardPlayDelay: 600,
+                maxCardsPerTurn: 2,
+                candidateThreshold: 0.4,
+                scoreNoise: 20,
+                aimSpreadMultiplier: 2.0,
+                aoeSpreadMultiplier: 2.5,
+                discardStrategy: 'random',
+                energyBonus: 0,
+                strategicScoring: false
+            },
+            normal: {
+                thinkingDelay: 800,
+                cardPlayDelay: 500,
+                maxCardsPerTurn: 3,
+                candidateThreshold: 0.7,
+                scoreNoise: 15,
+                aimSpreadMultiplier: 1.0,
+                aoeSpreadMultiplier: 1.0,
+                discardStrategy: 'rarity',
+                energyBonus: 0,
+                strategicScoring: false
+            },
+            hard: {
+                thinkingDelay: 400,
+                cardPlayDelay: 300,
+                maxCardsPerTurn: 3,
+                candidateThreshold: 0.95,
+                scoreNoise: 3,
+                aimSpreadMultiplier: 0.15,
+                aoeSpreadMultiplier: 0.25,
+                discardStrategy: 'scored',
+                energyBonus: 1,
+                strategicScoring: true
+            }
+        };
+
+        this.difficulty = DIFFICULTY[difficulty] || DIFFICULTY.normal;
+        this.difficultyName = difficulty;
+        this.thinkingDelay = this.difficulty.thinkingDelay;
+        this.cardPlayDelay = this.difficulty.cardPlayDelay;
     }
 
     delay(ms) {
@@ -14,12 +58,19 @@ class AIPlayer {
         if (this.isThinking) return;
         this.isThinking = true;
 
+        // 困难模式：额外能量
+        if (this.difficulty.energyBonus > 0) {
+            const player = this.game.players.find(p => p.id === playerId);
+            if (player) {
+                player.energy = Math.min(player.energy + this.difficulty.energyBonus, GAME_CONFIG.MAX_ENERGY);
+            }
+        }
+
         await this.delay(this.thinkingDelay);
 
         let cardsPlayed = 0;
-        const maxCardsPerTurn = 3;
 
-        while (cardsPlayed < maxCardsPerTurn) {
+        while (cardsPlayed < this.difficulty.maxCardsPerTurn) {
             const player = this.game.players.find(p => p.id === playerId);
             if (!player || player.eliminated) break;
 
@@ -27,10 +78,13 @@ class AIPlayer {
             if (!decision) break;
 
             if (decision.needDiscard) {
+                if (this.onDiscardStart) this.onDiscardStart();
                 this.autoDiscard(playerId);
                 await this.delay(300);
                 continue;
             }
+
+            if (this.onCardPlayed) this.onCardPlayed(decision.card);
 
             if (decision.needsAim) {
                 const target = this.chooseAimTarget(decision.card, playerId);
@@ -90,7 +144,7 @@ class AIPlayer {
         scored.sort((a, b) => b.score - a.score);
 
         const topScore = scored[0].score;
-        const candidates = scored.filter(s => s.score >= topScore * 0.7);
+        const candidates = scored.filter(s => s.score >= topScore * this.difficulty.candidateThreshold);
         const chosen = candidates[Math.floor(Math.random() * candidates.length)];
 
         return {
@@ -207,23 +261,17 @@ class AIPlayer {
                 break;
             case 'magnetic_field':
                 score = 55;
-                // 有电荷的敌人在场时更有价值
                 if (targetPlayer && targetPlayer.charge !== 0) score += 20;
-                // 自己带电时风险较高
                 if (player.charge !== 0) score -= 10;
                 break;
             case 'entropy_increase':
                 score = 50;
-                // 对方手牌多时更有价值（打乱对方好牌）
                 if (targetPlayer && targetPlayer.cards.length > player.cards.length) score += 20;
-                // 对方手牌少时价值降低
                 if (targetPlayer && targetPlayer.cards.length < player.cards.length) score -= 10;
                 break;
             case 'high_energy_radiation':
                 score = 60;
-                // 距离近时更容易命中锥形范围
                 if (distance < 200) score += 15;
-                // 对手在场地边缘时更有价值（更容易推出去）
                 if (targetPhysics) {
                     const targetDistFromCenter = Math.sqrt(targetPhysics.position.x ** 2 + targetPhysics.position.y ** 2);
                     if (targetDistFromCenter > GAME_CONFIG.ARENA_RADIUS * 0.6) score += 15;
@@ -233,7 +281,29 @@ class AIPlayer {
                 score = 40;
         }
 
-        score += (Math.random() - 0.5) * 15;
+        // 困难模式：更智能的上下文评分
+        if (this.difficulty.strategicScoring) {
+            // 快被淘汰时优先防御
+            if (isNearEdge && distFromCenter > GAME_CONFIG.ARENA_RADIUS * 0.8) {
+                const defensiveCards = ['anchor', 'directional_dash', 'brownian_motion', 'mass_decrease'];
+                if (defensiveCards.includes(card.id)) score += 25;
+            }
+            // 对手能量充足时优先攻击
+            if (targetPlayer && targetPlayer.energy >= 4) {
+                const attackCards = ['explosive_charge', 'momentum_blast', 'radiation', 'high_energy_radiation'];
+                if (attackCards.includes(card.id)) score += 15;
+            }
+            // 对手带电时磁场更有价值（已经在基础分里，这里加强）
+            if (card.id === 'magnetic_field' && targetPlayer && targetPlayer.charge !== 0) {
+                score += 10;
+            }
+            // 有热机时优先充能
+            if (card.id === 'heat_engine' && player.heatEngine && !player.heatEngine.active) {
+                score += 20;
+            }
+        }
+
+        score += (Math.random() - 0.5) * this.difficulty.scoreNoise;
 
         return score;
     }
@@ -262,10 +332,13 @@ class AIPlayer {
             ? { x: -selfPhysics.position.x / distFromCenter, y: -selfPhysics.position.y / distFromCenter }
             : { x: 0, y: 0 };
 
+        const aimSpread = this.difficulty.aimSpreadMultiplier;
+        const aoeSpread = this.difficulty.aoeSpreadMultiplier;
+
         switch (card.id) {
             case 'momentum_blast':
             case 'explosive_charge': {
-                const spread = (Math.random() - 0.5) * 0.3;
+                const spread = (Math.random() - 0.5) * 0.3 * aimSpread;
                 const cos = Math.cos(spread);
                 const sin = Math.sin(spread);
                 return {
@@ -284,7 +357,10 @@ class AIPlayer {
                 }
                 const perpX = -toTargetDir.y;
                 const perpY = toTargetDir.x;
-                const side = Math.random() > 0.5 ? 1 : -1;
+                // 困难模式总是选最优方向
+                const side = aimSpread >= 1.0
+                    ? (Math.random() > 0.5 ? 1 : -1)
+                    : 1;
                 return {
                     x: selfPhysics.position.x + (toTargetDir.x * 0.5 + perpX * side * 0.5) * 200,
                     y: selfPhysics.position.y + (toTargetDir.y * 0.5 + perpY * side * 0.5) * 200
@@ -292,8 +368,8 @@ class AIPlayer {
             }
 
             case 'gravity_well': {
-                const offsetX = (Math.random() - 0.5) * 100;
-                const offsetY = (Math.random() - 0.5) * 100;
+                const offsetX = (Math.random() - 0.5) * 100 * aoeSpread;
+                const offsetY = (Math.random() - 0.5) * 100 * aoeSpread;
                 const gx = targetPhysics
                     ? targetPhysics.position.x + offsetX
                     : selfPhysics.position.x + toTargetDir.x * 150;
@@ -311,10 +387,10 @@ class AIPlayer {
 
             case 'damping_field': {
                 const dx = targetPhysics
-                    ? targetPhysics.position.x + (Math.random() - 0.5) * 60
+                    ? targetPhysics.position.x + (Math.random() - 0.5) * 60 * aoeSpread
                     : selfPhysics.position.x + toTargetDir.x * 120;
                 const dy = targetPhysics
-                    ? targetPhysics.position.y + (Math.random() - 0.5) * 60
+                    ? targetPhysics.position.y + (Math.random() - 0.5) * 60 * aoeSpread
                     : selfPhysics.position.y + toTargetDir.y * 120;
                 const dDist = Math.sqrt(dx * dx + dy * dy);
                 const dMaxR = GAME_CONFIG.ARENA_RADIUS - (card.effect.radius || 0);
@@ -327,10 +403,10 @@ class AIPlayer {
 
             case 'ice_zone': {
                 const ix = targetPhysics
-                    ? targetPhysics.position.x + (Math.random() - 0.5) * 40
+                    ? targetPhysics.position.x + (Math.random() - 0.5) * 40 * aoeSpread
                     : selfPhysics.position.x + toTargetDir.x * 100;
                 const iy = targetPhysics
-                    ? targetPhysics.position.y + (Math.random() - 0.5) * 40
+                    ? targetPhysics.position.y + (Math.random() - 0.5) * 40 * aoeSpread
                     : selfPhysics.position.y + toTargetDir.y * 100;
                 const iDist = Math.sqrt(ix * ix + iy * iy);
                 const iMaxR = GAME_CONFIG.ARENA_RADIUS - (card.effect.radius || 0);
@@ -342,7 +418,7 @@ class AIPlayer {
             }
 
             case 'electromagnetic_cannon': {
-                const spread = (Math.random() - 0.5) * 0.2;
+                const spread = (Math.random() - 0.5) * 0.2 * aimSpread;
                 const cos = Math.cos(spread);
                 const sin = Math.sin(spread);
                 return {
@@ -352,8 +428,7 @@ class AIPlayer {
             }
 
             case 'high_energy_radiation': {
-                // 瞄准对手方向，非常精确（锥角只有10度）
-                const spread = (Math.random() - 0.5) * 0.05;
+                const spread = (Math.random() - 0.5) * 0.05 * aimSpread;
                 const cos = Math.cos(spread);
                 const sin = Math.sin(spread);
                 return {
@@ -379,13 +454,28 @@ class AIPlayer {
 
         this.game.startDiscardPhase(this.game.currentPlayerIndex, needDiscard, 'phaseDiscard');
 
-        const sortedCards = player.cards
-            .map((card, index) => ({ card, index }))
-            .sort((a, b) => {
-                const priority = { common: 0, rare: 1, epic: 2 };
-                return (priority[a.card.rarity] || 0) - (priority[b.card.rarity] || 0)
-                    || a.card.cost - b.card.cost;
-            });
+        let sortedCards;
+
+        if (this.difficulty.discardStrategy === 'random') {
+            // 简单模式：随机弃牌
+            sortedCards = player.cards
+                .map((card, index) => ({ card, index }))
+                .sort(() => Math.random() - 0.5);
+        } else if (this.difficulty.discardStrategy === 'scored') {
+            // 困难模式：按战略价值排序弃牌（弃最没用的）
+            sortedCards = player.cards
+                .map((card, index) => ({ card, index, score: this.scoreCard(card, playerId) }))
+                .sort((a, b) => a.score - b.score);
+        } else {
+            // 普通模式：按稀有度弃牌
+            sortedCards = player.cards
+                .map((card, index) => ({ card, index }))
+                .sort((a, b) => {
+                    const priority = { common: 0, rare: 1, epic: 2 };
+                    return (priority[a.card.rarity] || 0) - (priority[b.card.rarity] || 0)
+                        || a.card.cost - b.card.cost;
+                });
+        }
 
         for (let i = 0; i < needDiscard && i < sortedCards.length; i++) {
             this.game.toggleDiscardSelection(sortedCards[i].index);

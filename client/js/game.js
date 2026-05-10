@@ -12,6 +12,7 @@ class Game {
         this.selectedCard = null;
         this.aimingState = { active: false, card: null, cardIndex: -1, playerId: 0 };
         this.targetingState = { active: false, card: null, cardIndex: -1, playerId: 0 };
+        this.heatEngineAiming = { active: false, playerId: 0 };
         this.turnPhase = 'discard'; // discard, play
         this.lastPlayedCard = null;
         this.discardState = {
@@ -25,12 +26,12 @@ class Game {
         this.aiPlayer = null;
     }
 
-    initGame(mode = 'pvp') {
+    initGame(mode = 'pvp', difficulty = 'normal') {
         this.gameMode = mode;
         this.playerCount = mode === '3pvp' ? 3 : 2;
 
         if (mode === 'pve') {
-            this.aiPlayer = new AIPlayer(this);
+            this.aiPlayer = new AIPlayer(this, difficulty);
         } else {
             this.aiPlayer = null;
         }
@@ -51,13 +52,14 @@ class Game {
             this.players.push({
                 id: i, energy: GAME_CONFIG.STARTING_ENERGY, cards: [],
                 eliminated: false, effects: [], quantumState: null, heatEngine: null,
-                turnsPlayed: 0, charge: 0, chargeDuration: 0
+                turnsPlayed: 0, charge: 0, chargeDuration: 0, playerTurn: 0
             });
         }
 
         this.selectedCard = null;
         this.aimingState = { active: false, card: null, cardIndex: -1, playerId: 0 };
         this.targetingState = { active: false, card: null, cardIndex: -1, playerId: 0 };
+        this.heatEngineAiming = { active: false, playerId: 0 };
         this.turnPhase = 'discard';
         this.lastPlayedCard = null;
         this.discardState = { active: false, playerIndex: 0, requiredDiscards: 0, selectedIndices: [] };
@@ -336,7 +338,7 @@ class Game {
                     selfPlayer.effects.push({
                         type: 'massChange',
                         multiplier: card.effect.multiplier,
-                        expiryRound: this.currentTurn + card.effect.duration,
+                        expiryRound: selfPlayer.playerTurn + card.effect.duration,
                         currentMass: newMass
                     });
                     // 质量变化特效
@@ -422,7 +424,7 @@ class Game {
                     }
                     selfPlayer.effects.push({
                         type: 'anchor',
-                        expiryRound: this.currentTurn + card.effect.duration
+                        expiryRound: selfPlayer.playerTurn + card.effect.duration
                     });
                     // 立即告诉物理引擎这个玩家有定位锚了
                     if (this.physics.anchoredPlayerIds.indexOf(playerId) === -1) {
@@ -573,7 +575,7 @@ class Game {
                     selfPlayer.effects.push({
                         type: 'massChange',
                         multiplier: card.effect.massMultiplier,
-                        expiryRound: this.currentTurn + card.effect.duration,
+                        expiryRound: selfPlayer.playerTurn + card.effect.duration,
                         currentMass: newMass
                     });
                     // 特效
@@ -754,7 +756,7 @@ class Game {
                         selfPlayer.effects.push({
                             type: 'massChange',
                             multiplier: 0.9,
-                            expiryRound: this.currentTurn + 2,
+                            expiryRound: selfPlayer.playerTurn + 2,
                             currentMass: newMass
                         });
                         this.physics.addTempEffect({
@@ -820,6 +822,9 @@ class Game {
         if (this.turnPhase === 'discard') {
             const currentPlayer = this.players[this.currentPlayerIndex];
             currentPlayer.turnsPlayed++;
+            currentPlayer.playerTurn++;
+            // 在玩家回合开始时清理过期效果（出牌前）
+            this.cleanupPlayerEffects(currentPlayer);
             this.processPlayerEffects(currentPlayer);
             if (currentPlayer.chargeDuration > 0) {
                 currentPlayer.chargeDuration--;
@@ -869,14 +874,14 @@ class Game {
                 this.currentTurn++;
                 this.isNewRound = true;
                 this.turnPhase = 'discard';
+                // 回合边界：清理物理引擎中的全局过期效果
+                this.physics.updateEffectsTurn(this.currentTurn);
 
                 const firstPlayer = this.players[this.currentPlayerIndex];
                 if (firstPlayer && !firstPlayer.eliminated && firstPlayer.quantumState === 'superposition') {
                     this.collapseQuantumState(firstPlayer);
                 }
 
-                this.physics.updateEffectsTurn(this.currentTurn);
-                this.cleanupAllPlayerEffects();
                 for (let i = 0; i < this.players.length; i++) {
                     const player = this.players[i];
                     if (!player.eliminated) {
@@ -942,7 +947,7 @@ class Game {
         return closest;
     }
 
-    fireHeatEngine(playerId) {
+    fireHeatEngine(playerId, targetX, targetY) {
         const player = this.players.find(p => p.id === playerId);
         if (!player || !player.heatEngine || !player.heatEngine.active) return false;
         // 只要有充能就可以发射
@@ -950,42 +955,112 @@ class Game {
 
         const heatEngine = player.heatEngine;
         const selfPhysics = this.physics.getPlayer(player.id);
-        const targetPlayer = this.findClosestOpponent(player.id);
-        if (!targetPlayer) return false;
-        const targetId = targetPlayer.id;
-        const targetPhysics = this.physics.getPlayer(targetId);
+
+        // 确定目标位置
+        let dirX, dirY, targetPhysics, targetPlayer, targetId;
+        if (targetX !== undefined && targetY !== undefined) {
+            // 瞄准模式：向指定方向发射，找到该方向上的敌人
+            const dirLen = Math.sqrt(targetX * targetX + targetY * targetY);
+            if (dirLen === 0) return false;
+            dirX = targetX / dirLen;
+            dirY = targetY / dirLen;
+
+            // 找到瞄准方向上最近的敌人（角度偏差<30度且距离最近）
+            let bestTarget = null;
+            let bestScore = -Infinity;
+            for (const p of this.players) {
+                if (p.id === playerId || p.eliminated) continue;
+                if (p.quantumState !== null) continue;
+                const op = this.physics.getPlayer(p.id);
+                if (!op) continue;
+                const dx = op.position.x - selfPhysics.position.x;
+                const dy = op.position.y - selfPhysics.position.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist === 0) continue;
+                const nx = dx / dist;
+                const ny = dy / dist;
+                const dot = nx * dirX + ny * dirY;
+                // 角度偏差<45度才考虑，越近越优先
+                if (dot > 0.707) {
+                    const score = dot * 1000 - dist;
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestTarget = p;
+                    }
+                }
+            }
+            if (!bestTarget) {
+                // 没有找到方向上的敌人，向瞄准方向发射冲量（无目标）
+                // 找到任意最近敌人
+                bestTarget = this.findClosestOpponent(player.id);
+            }
+            if (!bestTarget) return false;
+            targetPlayer = bestTarget;
+            targetId = bestTarget.id;
+            targetPhysics = this.physics.getPlayer(targetId);
+        } else {
+            // 无瞄准：自动打最近的敌人（兼容旧调用）
+            targetPlayer = this.findClosestOpponent(player.id);
+            if (!targetPlayer) return false;
+            targetId = targetPlayer.id;
+            targetPhysics = this.physics.getPlayer(targetId);
+            if (!selfPhysics || !targetPhysics) return false;
+            const dx = targetPhysics.position.x - selfPhysics.position.x;
+            const dy = targetPhysics.position.y - selfPhysics.position.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist === 0) return false;
+            dirX = dx / dist;
+            dirY = dy / dist;
+        }
+
+        if (!selfPhysics || !targetPhysics) return false;
 
         // 检查目标是否有定位锚效果
         const hasAnchor = targetPlayer && targetPlayer.effects.some(e => e.type === 'anchor');
 
         // 释放充能点数倍的动量冲击（只对无定位锚的目标）
-        if (targetPhysics && selfPhysics && !hasAnchor) {
-            const dx = targetPhysics.position.x - selfPhysics.position.x;
-            const dy = targetPhysics.position.y - selfPhysics.position.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist > 0) {
-                const impulse = 200 * heatEngine.charge; // 充能点数 × 基础动量
-                const impulseX = (dx / dist) * impulse;
-                const impulseY = (dy / dist) * impulse;
-                this.physics.applyImpulse(targetId, impulseX, impulseY);
-                this.applyRecoil(player.id, impulseX, impulseY);
+        if (!hasAnchor) {
+            const impulse = 200 * heatEngine.charge;
+            const impulseX = dirX * impulse;
+            const impulseY = dirY * impulse;
+            this.physics.applyImpulse(targetId, impulseX, impulseY);
+            this.applyRecoil(player.id, impulseX, impulseY);
 
-                // 添加热机爆发特效
-                this.physics.addTempEffect({
-                    type: 'heat_engine_blast',
-                    x: targetPhysics.position.x,
-                    y: targetPhysics.position.y,
-                    life: 1500,
-                    maxLife: 1500,
-                    _seed: Date.now() + 9999,
-                    _startTime: Date.now()
-                });
-            }
+            // 添加热机爆发特效
+            this.physics.addTempEffect({
+                type: 'heat_engine_blast',
+                x: targetPhysics.position.x,
+                y: targetPhysics.position.y,
+                life: 1500,
+                maxLife: 1500,
+                _seed: Date.now() + 9999,
+                _startTime: Date.now()
+            });
         }
 
         // 发射后移除热机
         player.heatEngine = null;
+        this.heatEngineAiming = { active: false, playerId: 0 };
         return true;
+    }
+
+    startHeatEngineAim(playerId) {
+        const player = this.players.find(p => p.id === playerId);
+        if (!player || !player.heatEngine || !player.heatEngine.active) return false;
+        if (player.heatEngine.charge <= 0) return false;
+        this.heatEngineAiming = { active: true, playerId };
+        return true;
+    }
+
+    confirmHeatEngineAim(targetX, targetY) {
+        if (!this.heatEngineAiming.active) return false;
+        const playerId = this.heatEngineAiming.playerId;
+        const result = this.fireHeatEngine(playerId, targetX, targetY);
+        return result;
+    }
+
+    cancelHeatEngineAim() {
+        this.heatEngineAiming = { active: false, playerId: 0 };
     }
 
     // 热机结算（超时自动释放）
@@ -1033,37 +1108,41 @@ class Game {
         player.heatEngine = null;
     }
 
-    // 每回合开始时统一清理所有玩家的过期效果，消除时序不对称
+    // 清理单个玩家的过期效果
+    cleanupPlayerEffects(player) {
+        if (!player.effects || player.effects.length === 0) return;
+
+        player.effects = player.effects.filter(effect => {
+            if (effect.expiryRound !== undefined && player.playerTurn >= effect.expiryRound) {
+                if (effect.type === 'anchor') {
+                    player.anchorPosition = null;
+                    const physics = this.physics.getPlayer(player.id);
+                    if (physics) {
+                        physics._anchorPos = null;
+                        Matter.Body.setStatic(physics, false);
+                        physics.collisionFilter.mask = 0x0005;
+                    }
+                }
+                return false;
+            }
+            return true;
+        });
+
+        const massEffects = player.effects.filter(e => e.type === 'massChange');
+        if (massEffects.length === 0 && player.originalMass) {
+            this.physics.setPlayerMass(player.id, player.originalMass);
+            player.originalMass = null;
+        } else if (massEffects.length > 0 && player.originalMass) {
+            let m = player.originalMass;
+            for (const e of massEffects) m *= e.multiplier;
+            this.physics.setPlayerMass(player.id, m);
+        }
+    }
+
+    // 清理所有玩家的过期效果
     cleanupAllPlayerEffects() {
         for (const player of this.players) {
-            if (!player.effects || player.effects.length === 0) continue;
-
-            player.effects = player.effects.filter(effect => {
-                if (effect.expiryRound !== undefined && this.currentTurn >= effect.expiryRound) {
-                    if (effect.type === 'anchor') {
-                        player.anchorPosition = null;
-                        const physics = this.physics.getPlayer(player.id);
-                        if (physics) {
-                            physics._anchorPos = null;
-                            Matter.Body.setStatic(physics, false);
-                            physics.collisionFilter.mask = 0x0005;
-                        }
-                    }
-                    return false;
-                }
-                return true;
-            });
-
-            const massEffects = player.effects.filter(e => e.type === 'massChange');
-            if (massEffects.length === 0 && player.originalMass) {
-                this.physics.setPlayerMass(player.id, player.originalMass);
-                player.originalMass = null;
-            } else if (massEffects.length > 0 && player.originalMass) {
-                // 用剩余效果的乘数链重算质量
-                let m = player.originalMass;
-                for (const e of massEffects) m *= e.multiplier;
-                this.physics.setPlayerMass(player.id, m);
-            }
+            this.cleanupPlayerEffects(player);
         }
     }
 
@@ -1376,7 +1455,7 @@ class Game {
                 id: i, energy: GAME_CONFIG.STARTING_ENERGY, cards: [],
                 eliminated: false, shieldActive: false, effects: [],
                 charge: 0, chargeDuration: 0, quantumState: null,
-                heatEngine: null, turnsPlayed: 0
+                heatEngine: null, turnsPlayed: 0, playerTurn: 0
             });
         }
 

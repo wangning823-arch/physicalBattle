@@ -245,7 +245,7 @@ const CARDS_DATABASE = [
         id: 'momentum_conservation',
         name: '动量守恒',
         type: CARD_TYPES.FORCE,
-        cost: 2,
+        cost: 1,
         icon: '⚖️',
         description: '2回合内使用冲量卡牌时，自身获得反方向等大小冲量',
         formula: 'p₁ + p₂ = const',
@@ -278,12 +278,12 @@ const CARDS_DATABASE = [
         id: 'high_energy_radiation',
         name: '高能辐射',
         type: CARD_TYPES.LIGHT,
-        cost: 3,
+        cost: 4,
         icon: '☀️',
         description: '向瞄准方向发射高能辐射光束，对范围内敌人持续施加恒力，持续2回合',
         formula: 'F = hν/c · σ',
         effect: { needsAim: true, targetEnemy: true, duration: 2, forceStrength: 0.01, coneHalfAngle: 5 },
-        rarity: 'rare'
+        rarity: 'epic'
     }
 ];
 

@@ -471,6 +471,8 @@ body {
 
 #game-canvas {
     border-radius: 10px;
+    width: 800px;
+    height: 600px;
 }
 
 #hand-container {
@@ -831,6 +833,65 @@ body {
 
 @keyframes ai-spin {
     to { transform: rotate(360deg); }
+}
+
+/* AI出牌通知 */
+.ai-card-notification {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: linear-gradient(135deg, rgba(30, 144, 255, 0.15), rgba(30, 144, 255, 0.05));
+    border: 1px solid rgba(30, 144, 255, 0.3);
+    border-radius: 10px;
+    margin-left: 16px;
+    animation: ai-card-fadein 0.3s ease;
+}
+
+.ai-card-notification-show {
+    display: flex;
+}
+
+.ai-card-notification-hide {
+    display: none;
+}
+
+.ai-card-action {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.ai-card-played {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+}
+
+.ai-card-played[data-type="force"] { border-left: 3px solid #FF6B35; }
+.ai-card-played[data-type="electric"] { border-left: 3px solid #FFD700; }
+.ai-card-played[data-type="heat"] { border-left: 3px solid #EF4444; }
+.ai-card-played[data-type="light"] { border-left: 3px solid #A855F7; }
+.ai-card-played[data-type="melee"] { border-left: 3px solid #3B82F6; }
+
+.ai-card-played-icon {
+    font-size: 20px;
+}
+
+.ai-card-played-name {
+    font-size: 15px;
+    font-weight: bold;
+    color: #fff;
+}
+
+@keyframes ai-card-fadein {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 #discard-modal {

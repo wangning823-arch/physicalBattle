@@ -35,20 +35,41 @@ function triggerShake(intensity) {
     _shakeStart = Date.now();
 }
 
+function getShakeOffset(time) {
+    if (_shakeIntensity <= 0) return null;
+    const elapsed = time - _shakeStart;
+    if (elapsed >= _shakeDuration) {
+        _shakeIntensity = 0;
+        return null;
+    }
+    const decay = Math.pow(1 - elapsed / _shakeDuration, 2);
+    const freq = 30 + _shakeIntensity * 2;
+    const sx = Math.sin(elapsed * 0.06 * freq) * _shakeIntensity * decay * 1.5;
+    const sy = Math.cos(elapsed * 0.08 * freq) * _shakeIntensity * decay * 1.5;
+    const rotation = Math.sin(elapsed * 0.04 * freq) * 0.003 * _shakeIntensity * decay;
+    return { sx, sy, rotation };
+}
+
 // ============ Main Renderer ============
 class Renderer {
     constructor(canvas) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
-        this.canvas.width = GAME_CONFIG.CANVAS_WIDTH;
-        this.canvas.height = GAME_CONFIG.CANVAS_HEIGHT;
-        this.centerX = GAME_CONFIG.CANVAS_WIDTH / 2;
-        this.centerY = GAME_CONFIG.CANVAS_HEIGHT / 2;
+        this.dpr = window.devicePixelRatio || 1;
+        this.logicalWidth = GAME_CONFIG.CANVAS_WIDTH;
+        this.logicalHeight = GAME_CONFIG.CANVAS_HEIGHT;
+        this.canvas.width = this.logicalWidth * this.dpr;
+        this.canvas.height = this.logicalHeight * this.dpr;
+        this.canvas.style.width = this.logicalWidth + 'px';
+        this.canvas.style.height = this.logicalHeight + 'px';
+        this.ctx.scale(this.dpr, this.dpr);
+        this.centerX = this.logicalWidth / 2;
+        this.centerY = this.logicalHeight / 2;
     }
 
     clear() {
         this.ctx.fillStyle = '#0a0a1a';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
     }
 
     // ========== Utility Drawing Methods ==========
@@ -1430,7 +1451,7 @@ class Renderer {
                 if (progress > 0.85) {
                     const flashAlpha = (progress - 0.85) / 0.15 * 0.35;
                     ctx.fillStyle = `rgba(255,200,100,${flashAlpha})`;
-                    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                    ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
                 }
 
                 // 1. 超大核心白光
@@ -1883,9 +1904,11 @@ class Renderer {
                 const particles = _makeParticles(seed, 16, { minSpeed: 40, maxSpeed: 80, minSize: 1, maxSize: 3 });
                 const expand = 1 - progress;
                 particles.forEach(p => {
-                    const px = x + p.vx * expand * 0.8;
-                    const py = y + p.vy * expand * 0.8;
-                    const alpha = p.alpha * progress;
+                    const vx = Math.cos(p.angle) * p.speed;
+                    const vy = Math.sin(p.angle) * p.speed;
+                    const px = x + vx * expand * 0.8;
+                    const py = y + vy * expand * 0.8;
+                    const alpha = progress;
                     ctx.beginPath();
                     ctx.arc(px, py, p.size, 0, Math.PI * 2);
                     ctx.fillStyle = `rgba(0,255,80,${alpha})`;
@@ -1973,7 +1996,7 @@ class Renderer {
             const intensity = (dist - arenaRadius * 0.7) / (arenaRadius * 0.3);
             const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 150);
             ctx.fillStyle = `rgba(255,0,0,${intensity * 0.3 * pulse})`;
-            ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
         }
     }
 
@@ -1984,17 +2007,11 @@ class Renderer {
 
         // Screen shake
         const ctx = this.ctx;
-        if (_shakeIntensity > 0) {
-            const elapsed = Date.now() - _shakeStart;
-            if (elapsed < _shakeDuration) {
-                const decay = 1 - elapsed / _shakeDuration;
-                const sx = (Math.random() - 0.5) * _shakeIntensity * decay * 2;
-                const sy = (Math.random() - 0.5) * _shakeIntensity * decay * 2;
-                ctx.save();
-                ctx.translate(sx, sy);
-            } else {
-                _shakeIntensity = 0;
-            }
+        const shake = getShakeOffset(Date.now());
+        if (shake) {
+            ctx.save();
+            ctx.translate(shake.sx, shake.sy);
+            ctx.rotate(shake.rotation);
         }
 
         this.drawArena(gameState.arenaRadius);
@@ -2110,7 +2127,7 @@ class Renderer {
         }
 
         // End screen shake
-        if (_shakeIntensity > 0) {
+        if (shake) {
             ctx.restore();
         }
     }

@@ -32,6 +32,26 @@
         </div>
     </div>
 
+    <div id="difficulty-modal" class="modal hidden">
+        <div class="modal-content mode-select-content">
+            <h2 style="color: #1E90FF; margin-bottom: 20px;">选择AI难度</h2>
+            <p style="color: #aaa; margin-bottom: 30px;">选择挑战难度</p>
+            <div style="display: flex; gap: 20px; justify-content: center;">
+                <button id="diff-easy-btn" class="mode-btn">
+                    <span style="font-size: 32px;">🌱</span>
+                    <strong style="color: #4ade80;">简单</strong>
+                    <span style="color: #aaa; font-size: 12px;">AI较弱，适合新手</span>
+                </button>
+                <button id="diff-hard-btn" class="mode-btn">
+                    <span style="font-size: 32px;">🔥</span>
+                    <strong style="color: #ef4444;">困难</strong>
+                    <span style="color: #aaa; font-size: 12px;">AI精准，适合高手</span>
+                </button>
+            </div>
+            <button id="diff-back-btn" style="margin-top: 30px; padding: 10px 24px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px; color: #888; font-size: 13px; cursor: pointer; transition: all 0.2s;">返回</button>
+        </div>
+    </div>
+
     <div id="changelog-modal" class="hidden">
         <div class="modal-content changelog-content">
             <h2>📋 更新日志</h2>
@@ -40,7 +60,7 @@
                     <h3>v1.4 <span class="changelog-date">2026-05-05</span></h3>
                     <ul>
                         <li>新增卡牌：熵增定律（史诗）— 混合双方手牌后随机重新分配</li>
-                        <li>新增卡牌：高能辐射（稀有）— 向瞄准方向发射锥形持续力场光束</li>
+                        <li>新增卡牌：高能辐射（史诗）— 向瞄准方向发射锥形持续力场光束</li>
                         <li>质能方程改为基于当前质量计算，可叠加</li>
                         <li>电磁炮增加反冲效果：质量降低10%持续2回合，可叠加</li>
                         <li>多重质量效果现在按乘数链重算</li>
@@ -267,7 +287,7 @@
             </div>
             <div id="cards-area">
                 <div id="cards-hand"></div>
-                <div id="ai-thinking" style="display: none; align-items: center; justify-content: center; gap: 10px; color: #1E90FF; font-size: 18px; padding: 20px;">
+                <div id="ai-thinking" style="display: none; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px; color: #1E90FF; font-size: 18px; padding: 20px;">
                     <div class="ai-spinner"></div>
                     <span>AI 思考中...</span>
                 </div>
@@ -300,129 +320,161 @@
 
     <div id="card-guide" style="background: #1a1a2e; padding: 20px; margin-top: 20px; border-radius: 10px; color: #fff;">
         <h3 style="color: #1E90FF; margin-top: 0;">卡片使用说明</h3>
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px;">
-            <!-- ========== 普通 Common ========== -->
-            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #4a9eff; border-top: 3px solid #a855f7;">
-                <span style="font-size: 28px;">✨</span>
-                <strong style="color: #e0e0e0;">质能方程 (0能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">质量降低50%持续2轮，立即获得2点能量（可超过上限），质量到期恢复</p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px;">
+            <!-- 0费 -->
+            <div class="card" data-rarity="rare" data-cost="0" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">0</span>
+                <span class="card-icon">✨</span>
+                <span class="card-name">质能方程</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">质量降低50%持续2轮，获得2点能量</p>
             </div>
-            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #4a9eff; border-top: 3px solid #ef4444;">
-                <span style="font-size: 28px;">💥</span>
-                <strong style="color: #e0e0e0;">动量冲击 (1能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">点击选择方向，对敌人施加冲量</p>
+            <!-- 1费 -->
+            <div class="card" data-rarity="common" data-cost="1" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">1</span>
+                <span class="card-icon">💥</span>
+                <span class="card-name">动量冲击</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">对敌人施加冲量</p>
             </div>
-            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #4a9eff; border-top: 3px solid #f59e0b;">
-                <span style="font-size: 28px;">🏃</span>
-                <strong style="color: #e0e0e0;">定向冲刺 (1能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">点击选择方向，向该方向冲刺</p>
+            <div class="card" data-rarity="common" data-cost="1" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">1</span>
+                <span class="card-icon">🏃</span>
+                <span class="card-name">定向冲刺</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">向指定方向冲刺</p>
             </div>
-            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #4a9eff; border-top: 3px solid #22c55e;">
-                <span style="font-size: 28px;">🧊</span>
-                <strong style="color: #e0e0e0;">冰霜地带 (1能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">点击放置位置，大幅降低摩擦，持续1回合</p>
+            <div class="card" data-rarity="common" data-cost="1" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">1</span>
+                <span class="card-icon">🧊</span>
+                <span class="card-name">冰霜地带</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">降低区域摩擦，持续1回合</p>
             </div>
-            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #4a9eff; border-top: 3px solid #a855f7;">
-                <span style="font-size: 28px;">⬛</span>
-                <strong style="color: #e0e0e0;">惯性增强 (1能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">自身质量变为2倍，持续2回合</p>
+            <div class="card" data-rarity="common" data-cost="1" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">1</span>
+                <span class="card-icon">⬛</span>
+                <span class="card-name">惯性增强</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">质量变为2倍，持续2回合</p>
             </div>
-            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #4a9eff; border-top: 3px solid #a855f7;">
-                <span style="font-size: 28px;">🔲</span>
-                <strong style="color: #e0e0e0;">惯性减弱 (1能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">自身质量变为0.5倍，持续2回合</p>
+            <div class="card" data-rarity="common" data-cost="1" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">1</span>
+                <span class="card-icon">🔲</span>
+                <span class="card-name">惯性减弱</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">质量变为0.5倍，持续2回合</p>
             </div>
-            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #4a9eff; border-top: 3px solid #ef4444;">
-                <span style="font-size: 28px;">🧲</span>
-                <strong style="color: #e0e0e0;">正电荷附着 (1能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">给敌人附着一个正电荷，持续2回合</p>
+            <div class="card" data-rarity="common" data-cost="1" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">1</span>
+                <span class="card-icon">🧲</span>
+                <span class="card-name">正电荷附着</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">给敌人附着正电荷</p>
             </div>
-            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #4a9eff; border-top: 3px solid #ef4444;">
-                <span style="font-size: 28px;">🪩</span>
-                <strong style="color: #e0e0e0;">负电荷附着 (1能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">给敌人附着一个负电荷，持续2回合</p>
+            <div class="card" data-rarity="common" data-cost="1" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">1</span>
+                <span class="card-icon">🪩</span>
+                <span class="card-name">负电荷附着</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">给敌人附着负电荷</p>
             </div>
-            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #4a9eff; border-top: 3px solid #a855f7;">
-                <span style="font-size: 28px;">⚡</span>
-                <strong style="color: #e0e0e0;">自身带正电 (1能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">给自己附着一个正电荷，持续2回合</p>
+            <div class="card" data-rarity="common" data-cost="1" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">1</span>
+                <span class="card-icon">⚡</span>
+                <span class="card-name">自身带正电</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">给自己附着正电荷</p>
             </div>
-            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #4a9eff; border-top: 3px solid #a855f7;">
-                <span style="font-size: 28px;">🔋</span>
-                <strong style="color: #e0e0e0;">自身带负电 (1能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">给自己附着一个负电荷，持续2回合</p>
+            <div class="card" data-rarity="common" data-cost="1" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">1</span>
+                <span class="card-icon">🔋</span>
+                <span class="card-name">自身带负电</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">给自己附着负电荷</p>
             </div>
-            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #4a9eff; border-top: 3px solid #f59e0b;">
-                <span style="font-size: 28px;">🎲</span>
-                <strong style="color: #e0e0e0;">布朗运动 (1能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">随机方向移动80冲量</p>
+            <div class="card" data-rarity="common" data-cost="1" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">1</span>
+                <span class="card-icon">🎲</span>
+                <span class="card-name">布朗运动</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">随机方向移动</p>
             </div>
-            <!-- ========== 稀有 Rare ========== -->
-            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #a855f7; border-top: 3px solid #a855f7;">
-                <span style="font-size: 28px;">🪢</span>
-                <strong style="color: #e0e0e0;">软绳约束 (1能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">用软绳连接你与对手，距离可自由变化但超过原长时立即锁定，持续3回合</p>
+            <div class="card" data-rarity="rare" data-cost="1" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">1</span>
+                <span class="card-icon">🪢</span>
+                <span class="card-name">软绳约束</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">连接两人，超原长锁定</p>
             </div>
-            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #a855f7; border-top: 3px solid #3b82f6;">
-                <span style="font-size: 28px;">⚓</span>
-                <strong style="color: #e0e0e0;">定位锚 (2能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">固定自身位置1回合，免疫位移</p>
+            <div class="card" data-rarity="rare" data-cost="1" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">1</span>
+                <span class="card-icon">⚖️</span>
+                <span class="card-name">动量守恒</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">冲量卡获得反向等量冲量</p>
             </div>
-            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #a855f7; border-top: 3px solid #3b82f6;">
-                <span style="font-size: 28px;">💫</span>
-                <strong style="color: #e0e0e0;">排斥力场 (2能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">在自身周围产生排斥力场，持续2回合</p>
+            <!-- 2费 -->
+            <div class="card" data-rarity="rare" data-cost="2" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">2</span>
+                <span class="card-icon">⚓</span>
+                <span class="card-name">定位锚</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">固定位置1回合</p>
             </div>
-            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #a855f7; border-top: 3px solid #3b82f6;">
-                <span style="font-size: 28px;">🫧</span>
-                <strong style="color: #e0e0e0;">阻尼领域 (2能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">在指定位置放置阻尼领域，区域内运动快速衰减，持续2回合</p>
+            <div class="card" data-rarity="rare" data-cost="2" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">2</span>
+                <span class="card-icon">💫</span>
+                <span class="card-name">排斥力场</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">周围产生排斥力</p>
             </div>
-            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #a855f7; border-top: 3px solid #22c55e;">
-                <span style="font-size: 28px;">🕳️</span>
-                <strong style="color: #e0e0e0;">引力陷阱 (2能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">点击放置位置，产生持续引力场，持续2回合</p>
+            <div class="card" data-rarity="rare" data-cost="2" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">2</span>
+                <span class="card-icon">🫧</span>
+                <span class="card-name">阻尼领域</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">区域运动快速衰减</p>
             </div>
-            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #a855f7; border-top: 3px solid #a855f7;">
-                <span style="font-size: 28px;">⛓️</span>
-                <strong style="color: #e0e0e0;">刚性连接 (2能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">将你与对手刚性连接，距离保持不变，持续2回合</p>
+            <div class="card" data-rarity="rare" data-cost="2" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">2</span>
+                <span class="card-icon">🕳️</span>
+                <span class="card-name">引力陷阱</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">放置持续引力场</p>
             </div>
-            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #a855f7; border-top: 3px solid #ef4444;">
-                <span style="font-size: 28px;">☢️</span>
-                <strong style="color: #e0e0e0;">辐射 (3能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">烧毁对方价值最高的一张牌</p>
+            <div class="card" data-rarity="rare" data-cost="2" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">2</span>
+                <span class="card-icon">⛓️</span>
+                <span class="card-name">刚性连接</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">两人距离保持不变</p>
             </div>
-            <div style="background: #252540; padding: 12px; border-radius: 10px; border: 2px solid #a855f7; border-top: 3px solid #ffd700;">
-                <span style="font-size: 28px;">🔮</span>
-                <strong style="color: #e0e0e0;">磁场 (3能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">全场产生磁场，带电玩家移动时受到洛伦兹力偏转，持续2回合</p>
+            <!-- 3费 -->
+            <div class="card" data-rarity="rare" data-cost="3" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">3</span>
+                <span class="card-icon">☢️</span>
+                <span class="card-name">辐射</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">烧毁对方最高价值牌</p>
             </div>
-            <!-- ========== 史诗 Epic ========== -->
-            <div style="background: #2d2d50; padding: 12px; border-radius: 10px; border: 2px solid #f59e0b; border-top: 3px solid #ef4444;">
-                <span style="font-size: 28px;">☄️</span>
-                <strong style="color: #fbbf24;">爆裂冲击 (3能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">强力冲量攻击，点击选择方向</p>
+            <div class="card" data-rarity="rare" data-cost="3" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">3</span>
+                <span class="card-icon">🔮</span>
+                <span class="card-name">磁场</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">洛伦兹力偏转带电玩家</p>
             </div>
-            <div style="background: #2d2d50; padding: 12px; border-radius: 10px; border: 2px solid #f59e0b; border-top: 3px solid #3b82f6;">
-                <span style="font-size: 28px;">👻</span>
-                <strong style="color: #fbbf24;">量子叠加 (4能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">进入量子叠加态：隐身，本回合无法出牌，对手回合免疫一切，下回合随机位置坍缩</p>
+            <div class="card" data-rarity="epic" data-cost="3" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">3</span>
+                <span class="card-icon">☄️</span>
+                <span class="card-name">爆裂冲击</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">强力冲量攻击</p>
             </div>
-            <div style="background: #2d2d50; padding: 12px; border-radius: 10px; border: 2px solid #f59e0b; border-top: 3px solid #a855f7;">
-                <span style="font-size: 28px;">🔥</span>
-                <strong style="color: #fbbf24;">热机 (4能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">召唤热机附身，2回合内可充能3点触发3倍动量冲击的强力冲量，被冰冻则能量归零</p>
+            <div class="card" data-rarity="epic" data-cost="3" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">3</span>
+                <span class="card-icon">🔫</span>
+                <span class="card-name">电磁炮</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">发射带电炮弹，需带电</p>
             </div>
-            <div style="background: #2d2d50; padding: 12px; border-radius: 10px; border: 2px solid #f59e0b; border-top: 3px solid #ef4444;">
-                <span style="font-size: 28px;">🔫</span>
-                <strong style="color: #fbbf24;">电磁炮 (3能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">消耗自身10%质量发射带电炮弹，速度与电荷量成正比，命中造成750冲量，需自身带电</p>
+            <!-- 4费 -->
+            <div class="card" data-rarity="epic" data-cost="4" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">4</span>
+                <span class="card-icon">☀️</span>
+                <span class="card-name">高能辐射</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">锥形持续力场光束</p>
             </div>
-            <div style="background: #2d2d50; padding: 12px; border-radius: 10px; border: 2px solid #a855f7; border-top: 3px solid #7c3aed;">
-                <span style="font-size: 28px;">⚖️</span>
-                <strong style="color: #c084fc;">动量守恒 (2能量)</strong>
-                <p style="margin: 5px 0; font-size: 12px; color: #aaa;">2回合内使用冲量卡牌时，自身获得反方向等大小冲量</p>
+            <div class="card" data-rarity="epic" data-cost="4" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">4</span>
+                <span class="card-icon">👻</span>
+                <span class="card-name">量子叠加</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">隐身免疫，下回合坍缩</p>
+            </div>
+            <div class="card" data-rarity="epic" data-cost="4" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">4</span>
+                <span class="card-icon">🔥</span>
+                <span class="card-name">热机</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">充能后发射强力冲量</p>
             </div>
         </div>
         <p style="margin-top: 15px; font-size: 14px; color: #aaa;">

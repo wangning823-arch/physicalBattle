@@ -30,7 +30,7 @@ const GameUI = {
         }
     },
 
-    startGame(mode) {
+    startGame(mode, difficulty) {
         const modal = document.getElementById('mode-select-modal');
         if (modal) {
             modal.classList.add('hidden');
@@ -42,7 +42,7 @@ const GameUI = {
             gameOverModal.classList.add('hidden');
         }
 
-        this.game.initGame(mode);
+        this.game.initGame(mode, difficulty);
         console.log('Game initialized with mode:', mode);
 
         const is3P = mode === '3pvp';
@@ -67,7 +67,13 @@ const GameUI = {
 
         const p2Name = document.querySelector('#player2-status .player-name');
         if (p2Name) {
-            p2Name.textContent = mode === 'pve' ? 'AI 对手' : '玩家 2';
+            if (mode === 'pve') {
+                const diffLabel = { easy: '简单', normal: '普通', hard: '困难' };
+                const label = diffLabel[difficulty] || '普通';
+                p2Name.textContent = `AI [${label}]`;
+            } else {
+                p2Name.textContent = '玩家 2';
+            }
         }
 
         const p2Avatar = document.querySelector('#player2-status .player-avatar');
@@ -90,7 +96,23 @@ const GameUI = {
         });
 
         document.getElementById('mode-pve-btn').addEventListener('click', () => {
-            this.startGame('pve');
+            document.getElementById('mode-select-modal').classList.add('hidden');
+            document.getElementById('difficulty-modal').classList.remove('hidden');
+        });
+
+        document.getElementById('diff-easy-btn').addEventListener('click', () => {
+            document.getElementById('difficulty-modal').classList.add('hidden');
+            this.startGame('pve', 'easy');
+        });
+
+        document.getElementById('diff-hard-btn').addEventListener('click', () => {
+            document.getElementById('difficulty-modal').classList.add('hidden');
+            this.startGame('pve', 'hard');
+        });
+
+        document.getElementById('diff-back-btn').addEventListener('click', () => {
+            document.getElementById('difficulty-modal').classList.add('hidden');
+            document.getElementById('mode-select-modal').classList.remove('hidden');
         });
 
         document.getElementById('mode-3pvp-btn').addEventListener('click', () => {
@@ -109,6 +131,9 @@ const GameUI = {
             console.log('End turn button clicked');
             if (this.game.aimingState.active) {
                 this.game.cancelAim();
+                this.updateUI();
+            } else if (this.game.heatEngineAiming.active) {
+                this.game.cancelHeatEngineAim();
                 this.updateUI();
             } else if (this.game.targetingState.active) {
                 this.game.cancelTarget();
@@ -158,6 +183,9 @@ const GameUI = {
             if (this.game.aimingState.active) {
                 this.game.confirmAim(x, y);
                 this.updateUI();
+            } else if (this.game.heatEngineAiming.active) {
+                this.game.confirmHeatEngineAim(x, y);
+                this.updateUI();
             } else if (this.game.targetingState.active) {
                 // 检查点击了哪个玩家
                 const clickedPlayer = this.findClickedPlayer(x, y);
@@ -169,7 +197,7 @@ const GameUI = {
         });
 
         canvas.addEventListener('mousemove', (e) => {
-            if (this.game.aimingState.active) {
+            if (this.game.aimingState.active || this.game.heatEngineAiming.active) {
                 const rect = canvas.getBoundingClientRect();
                 const scaleX = 800 / rect.width;
                 const scaleY = 600 / rect.height;
@@ -184,7 +212,7 @@ const GameUI = {
 
         // 触摸事件支持（平板瞄准）
         canvas.addEventListener('touchmove', (e) => {
-            if (this.game.aimingState.active) {
+            if (this.game.aimingState.active || this.game.heatEngineAiming.active) {
                 e.preventDefault();
                 const touch = e.touches[0];
                 const rect = canvas.getBoundingClientRect();
@@ -201,6 +229,11 @@ const GameUI = {
             if (this.game.aimingState.active && this.aimingTarget) {
                 e.preventDefault();
                 this.game.confirmAim(this.aimingTarget.x, this.aimingTarget.y);
+                this.aimingTarget = null;
+                this.updateUI();
+            } else if (this.game.heatEngineAiming.active && this.aimingTarget) {
+                e.preventDefault();
+                this.game.confirmHeatEngineAim(this.aimingTarget.x, this.aimingTarget.y);
                 this.aimingTarget = null;
                 this.updateUI();
             }
@@ -272,16 +305,68 @@ const GameUI = {
     async triggerAITurn() {
         if (!this.game.aiPlayer || this.game.aiPlayer.isThinking) return;
 
+        const aiPlayer = this.game.aiPlayer;
+
+        // 设置AI出牌回调
+        aiPlayer.onCardPlayed = (card) => {
+            this.showAICardNotification(card);
+        };
+        aiPlayer.onDiscardStart = () => {
+            this.showAICardNotification(null, true);
+        };
+
         this.updateUI();
 
-        await this.game.aiPlayer.playTurn(this.game.players[1].id);
+        await aiPlayer.playTurn(this.game.players[1].id);
+
+        // 清除回调
+        aiPlayer.onCardPlayed = null;
+        aiPlayer.onDiscardStart = null;
 
         if (this.game.isNewRound) {
             this.game.drawCardsForAllPlayers();
         }
 
         this.updateUI();
+        this.clearAICardNotification();
         this.handleCurrentPhase();
+    },
+
+    showAICardNotification(card, isDiscard = false) {
+        const aiThinking = document.getElementById('ai-thinking');
+        if (!aiThinking) return;
+
+        let notification = aiThinking.querySelector('.ai-card-notification');
+        if (!notification) {
+            notification = document.createElement('div');
+            notification.className = 'ai-card-notification';
+            aiThinking.appendChild(notification);
+        }
+
+        if (isDiscard) {
+            notification.innerHTML = '<div class="ai-card-action">弃牌中...</div>';
+        } else if (card) {
+            notification.innerHTML = `
+                <div class="ai-card-action">使用卡牌</div>
+                <div class="ai-card-played" data-type="${card.type}">
+                    <span class="ai-card-played-icon">${card.icon}</span>
+                    <span class="ai-card-played-name">${card.name}</span>
+                </div>
+            `;
+        }
+
+        notification.classList.remove('ai-card-notification-hide');
+        notification.classList.add('ai-card-notification-show');
+    },
+
+    clearAICardNotification() {
+        const aiThinking = document.getElementById('ai-thinking');
+        if (!aiThinking) return;
+        const notification = aiThinking.querySelector('.ai-card-notification');
+        if (notification) {
+            notification.classList.remove('ai-card-notification-show');
+            notification.classList.add('ai-card-notification-hide');
+        }
     },
 
     updateUI() {
@@ -302,7 +387,15 @@ const GameUI = {
             endTurnBtn.disabled = true;
             endTurnBtn.textContent = 'AI 回合中...';
             if (cardsHand) cardsHand.style.display = 'none';
-            if (aiThinking) aiThinking.style.display = 'flex';
+            if (aiThinking) {
+                aiThinking.style.display = 'flex';
+                const aiSpan = aiThinking.querySelector('span');
+                if (aiSpan && this.game.aiPlayer) {
+                    const diffLabel = { easy: '简单', normal: '普通', hard: '困难' };
+                    const label = diffLabel[this.game.aiPlayer.difficultyName] || '普通';
+                    aiSpan.textContent = `AI 思考中... [${label}]`;
+                }
+            }
         } else {
             endTurnBtn.disabled = false;
             if (cardsHand) cardsHand.style.display = 'flex';
@@ -452,7 +545,7 @@ const GameUI = {
                     fireBtn.addEventListener('click', (e) => {
                         const pid = parseInt(e.target.dataset.playerId);
                         console.log('发射按钮被点击，玩家ID:', pid);
-                        self.fireHeatEngine(pid);
+                        self.startHeatEngineAim(pid);
                     });
                     fireBtn.addEventListener('mouseover', (e) => {
                         if (!e.target.disabled) {
@@ -522,9 +615,9 @@ const GameUI = {
         this.updateUI();
     },
 
-    // 手动发射热机
-    fireHeatEngine(playerId) {
-        const success = this.game.fireHeatEngine(playerId);
+    // 手动发射热机（进入瞄准模式）
+    startHeatEngineAim(playerId) {
+        const success = this.game.startHeatEngineAim(playerId);
         if (success) {
             this.updateUI();
         }
@@ -738,7 +831,9 @@ const GameUI = {
 
         let playerLabel = `玩家 ${currentPlayerId}`;
         if (this.game.gameMode === 'pve' && currentPlayerId === 2) {
-            playerLabel = 'AI';
+            const diffLabel = { easy: '简单', normal: '普通', hard: '困难' };
+            const label = this.game.aiPlayer ? diffLabel[this.game.aiPlayer.difficultyName] : '';
+            playerLabel = label ? `AI [${label}]` : 'AI';
         }
 
         if (indicator) {
