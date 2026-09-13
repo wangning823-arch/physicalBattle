@@ -1038,11 +1038,14 @@ class Game {
         // 确定目标位置
         let dirX, dirY, targetPhysics, targetPlayer, targetId;
         if (targetX !== undefined && targetY !== undefined) {
-            // 瞄准模式：向指定方向发射，找到该方向上的敌人
-            const dirLen = Math.sqrt(targetX * targetX + targetY * targetY);
+            // 瞄准模式：目标是场地绝对坐标，方向应从自身指向瞄准点
+            if (!selfPhysics) return false;
+            const rawDX = targetX - selfPhysics.position.x;
+            const rawDY = targetY - selfPhysics.position.y;
+            const dirLen = Math.sqrt(rawDX * rawDX + rawDY * rawDY);
             if (dirLen === 0) return false;
-            dirX = targetX / dirLen;
-            dirY = targetY / dirLen;
+            dirX = rawDX / dirLen;
+            dirY = rawDY / dirLen;
 
             // 找到瞄准方向上最近的敌人（角度偏差<30度且距离最近）
             let bestTarget = null;
