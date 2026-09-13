@@ -31,6 +31,10 @@ const GameUI = {
     },
 
     startGame(mode, difficulty) {
+        // 停掉可能仍在跑的旧循环，并重置时间戳，避免新局第一帧拿到巨大/负的 deltaTime
+        this.gameLoopRunning = false;
+        this.lastTime = 0;
+
         const modal = document.getElementById('mode-select-modal');
         if (modal) {
             modal.classList.add('hidden');
@@ -1039,6 +1043,7 @@ const GameUI = {
 
             if (this.game.state === GAME_STATES.GAME_OVER) {
                 this.gameLoopRunning = false;
+                this.gameStarted = false;
                 const alive = this.game.players.filter(p => !p.eliminated);
                 if (alive.length === 1 || alive.length === 0) {
                     this.showGameOver(alive[0] || { id: 0 });
