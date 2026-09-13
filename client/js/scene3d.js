@@ -5,6 +5,8 @@
 const SCENE3D = {
     WIDTH: 800,
     HEIGHT: 600,
+    MIN_WIDTH: 480,
+    MIN_HEIGHT: 320,
     ARENA_RADIUS: 300, // 与 GAME_CONFIG.ARENA_RADIUS 对齐（2D 逻辑单位 → 3D，1:1）
     CAMERA_POS: { x: 0, y: 420, z: 380 },
     LOOK_AT: { x: 0, y: 0, z: 0 },
@@ -146,23 +148,25 @@ class Scene3D {
             return false;
         }
 
-        const w = SCENE3D.WIDTH;
-        const h = SCENE3D.HEIGHT;
+        // #6 尺寸跟容器走（先临时显示测量），失败回退 800x600
+        const measured = Scene3D._measureContainer(this.container);
+        this._width = measured.w;
+        this._height = measured.h;
 
         this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-        this.renderer.setSize(w, h, false);
+        this.renderer.setSize(this._width, this._height, false);
         this.renderer.setClearColor(0x070714, 1);
         this.renderer.domElement.id = 'three-canvas';
-        this.renderer.domElement.style.width = w + 'px';
-        this.renderer.domElement.style.height = h + 'px';
+        this.renderer.domElement.style.width = '100%';
+        this.renderer.domElement.style.height = '100%';
         this.renderer.domElement.style.display = 'block';
         this.container.appendChild(this.renderer.domElement);
 
         this.scene = new THREE.Scene();
         this.scene.fog = new THREE.Fog(0x070714, 700, 1400);
 
-        this.camera = new THREE.PerspectiveCamera(45, w / h, 1, 2000);
+        this.camera = new THREE.PerspectiveCamera(45, this._width / this._height, 1, 2000);
         this.camera.position.set(SCENE3D.CAMERA_POS.x, SCENE3D.CAMERA_POS.y, SCENE3D.CAMERA_POS.z);
         this.camera.lookAt(SCENE3D.LOOK_AT.x, SCENE3D.LOOK_AT.y, SCENE3D.LOOK_AT.z);
 
@@ -179,8 +183,45 @@ class Scene3D {
         window.addEventListener('resize', this._onResize);
         this._bindPointer();
         this.ready = true;
-        console.log('[Scene3D] 竞技场/玩家体/相机/卡牌特效占位就绪（#5）');
+        // #6 body 标记 + 侧栏默认折叠（不抢竞技场宽度）
+        document.body.classList.add('mode-3d');
+        Scene3D._collapseSidePanels(true);
+        this.handleResize();
+        console.log('[Scene3D] 竞技场/玩家体/相机/卡牌特效 + UI 共存布局就绪（#6）');
         return true;
+    }
+
+    /** 测容器可用宽高：自身 0 时回退父级，再回退视口估算 */
+    static _measureContainer(container) {
+        const minW = SCENE3D.MIN_WIDTH;
+        const minH = SCENE3D.MIN_HEIGHT;
+        let w = container ? container.clientWidth : 0;
+        let h = container ? container.clientHeight : 0;
+        if (!w || !h) {
+            const parent = container && container.parentElement;
+            if (parent) {
+                w = parent.clientWidth || w;
+                h = parent.clientHeight || h;
+            }
+        }
+        if (!w || !h) {
+            w = window.innerWidth - 80;
+            h = Math.max(420, window.innerHeight - 320);
+        }
+        return {
+            w: Math.max(minW, Math.floor(w)),
+            h: Math.max(minH, Math.floor(h))
+        };
+    }
+
+    /** 3D 模式下折叠/展开两侧参数面板 */
+    static _collapseSidePanels(collapsed) {
+        ['card-params-panel', 'physics-params-panel'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (collapsed) el.classList.add('collapsed');
+            else el.classList.remove('collapsed');
+        });
     }
 
     // ---------- #4 相机 rig / 视角 ----------
@@ -1899,9 +1940,16 @@ class Scene3D {
     // ---------- 帧更新 ----------
 
     handleResize() {
-        if (!this.ready || !this.container) return;
-        this.renderer.setSize(SCENE3D.WIDTH, SCENE3D.HEIGHT, false);
-        this.camera.aspect = SCENE3D.WIDTH / SCENE3D.HEIGHT;
+        if (!this.ready || !this.container || !this.renderer) return;
+        const m = Scene3D._measureContainer(this.container);
+        this._width = m.w;
+        this._height = m.h;
+        this.renderer.setSize(m.w, m.h, false);
+        if (this.renderer.domElement) {
+            this.renderer.domElement.style.width = '100%';
+            this.renderer.domElement.style.height = '100%';
+        }
+        this.camera.aspect = m.w / m.h;
         this.camera.updateProjectionMatrix();
     }
 
@@ -2022,6 +2070,9 @@ class Scene3D {
         this._effectMeshes = [];
         this._effectKeys = '';
         this.container = null;
+        // #6 退出 3D 布局
+        document.body.classList.remove('mode-3d');
+        Scene3D._collapseSidePanels(false);
         this.ready = false;
     }
 }
@@ -2037,15 +2088,25 @@ function ensureScene3D() {
     }
     if (!window.Scene3DInstance) {
         window.Scene3DInstance = new Scene3D();
-        const ok = window.Scene3DInstance.init(document.getElementById('three-container'));
-        if (!ok) {
-            window.Scene3DInstance = null;
-            return null;
-        }
-        const canvas2d = document.getElementById('game-canvas');
         const container3d = document.getElementById('three-container');
+        const canvas2d = document.getElementById('game-canvas');
+        // 先露出容器再 init，便于 #6 测量真实宽高
         if (canvas2d) canvas2d.style.display = 'none';
         if (container3d) container3d.classList.remove('hidden');
+        const ok = window.Scene3DInstance.init(container3d);
+        if (!ok) {
+            window.Scene3DInstance = null;
+            if (canvas2d) canvas2d.style.display = '';
+            if (container3d) container3d.classList.add('hidden');
+            return null;
+        }
+        // 点击侧栏标题折叠/展开
+        document.querySelectorAll('#main-game-area .side-panel h3').forEach(h3 => {
+            h3.addEventListener('click', () => {
+                const panel = h3.closest('.side-panel');
+                if (panel) panel.classList.toggle('collapsed');
+            });
+        });
     }
     return window.Scene3DInstance;
 }

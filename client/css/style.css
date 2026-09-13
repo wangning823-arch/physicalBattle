@@ -1194,3 +1194,169 @@ body {
     transform: scale(1.05);
     box-shadow: 0 5px 20px rgba(30, 144, 255, 0.5);
 }
+
+/* ========== #6 UI/手牌与 3D 场景布局共存 ========== */
+/* 3D 模式：body.mode-3d 由 ensureScene3D 打上；2D 默认布局不受影响 */
+
+body.mode-3d {
+    padding: 12px;
+    overflow-x: hidden;
+}
+
+body.mode-3d #game-container {
+    max-width: 1280px;
+    min-height: calc(100vh - 24px);
+    display: flex;
+    flex-direction: column;
+}
+
+body.mode-3d #hud-top {
+    flex-shrink: 0;
+}
+
+/* 主区：竞技场撑满中间，侧栏悬浮叠在上方 */
+body.mode-3d #main-game-area {
+    position: relative;
+    flex: 1;
+    min-height: 420px;
+    display: block;
+}
+
+body.mode-3d #arena-container {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    height: auto;
+    min-height: 420px;
+}
+
+body.mode-3d #three-container:not(.hidden) {
+    width: 100%;
+    height: 100%;
+    min-height: 420px;
+}
+
+body.mode-3d #three-canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+}
+
+/* 侧栏：3D 下改为角落悬浮半透明面板，默认可折叠 */
+body.mode-3d .side-panel {
+    position: absolute;
+    top: 10px;
+    width: 200px;
+    max-height: calc(100% - 20px);
+    overflow-y: auto;
+    z-index: 20;
+    background: linear-gradient(180deg, rgba(15, 15, 35, 0.88), rgba(10, 10, 25, 0.82));
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+body.mode-3d #card-params-panel {
+    left: 10px;
+}
+
+body.mode-3d #physics-params-panel {
+    right: 10px;
+}
+
+body.mode-3d .side-panel.collapsed {
+    width: auto;
+    padding: 6px 10px;
+    max-height: none;
+    overflow: hidden;
+}
+
+body.mode-3d .side-panel.collapsed > *:not(h3) {
+    display: none;
+}
+
+body.mode-3d .side-panel h3 {
+    cursor: pointer;
+    user-select: none;
+    margin-bottom: 0;
+    padding-bottom: 8px;
+}
+
+body.mode-3d .side-panel:not(.collapsed) h3 {
+    margin-bottom: 14px;
+}
+
+body.mode-3d .side-panel h3::after {
+    content: ' ▾';
+    color: #1E90FF;
+    font-size: 11px;
+}
+
+body.mode-3d .side-panel.collapsed h3::after {
+    content: ' ▸';
+}
+
+/* 手牌区始终在 3D 画布之上、底部常驻 */
+body.mode-3d #hand-container {
+    flex-shrink: 0;
+    position: relative;
+    z-index: 30;
+    background: rgba(0, 0, 0, 0.72);
+    border: 1px solid rgba(100, 150, 255, 0.18);
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.45);
+    pointer-events: auto;
+}
+
+/* 3D 模式角标与操作提示 */
+#mode-3d-badge {
+    display: none;
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 25;
+    padding: 4px 14px;
+    border-radius: 999px;
+    background: rgba(30, 144, 255, 0.18);
+    border: 1px solid rgba(30, 144, 255, 0.45);
+    color: #7eb6ff;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+body.mode-3d #mode-3d-badge {
+    display: block;
+}
+
+#mode-3d-hint {
+    display: none;
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 25;
+    padding: 6px 16px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #9aa8c0;
+    font-size: 12px;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+body.mode-3d #mode-3d-hint {
+    display: block;
+}
+
+body.mode-3d #mode-3d-hint kbd {
+    display: inline-block;
+    padding: 1px 6px;
+    margin: 0 2px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+    font-family: inherit;
+    font-size: 11px;
+    color: #cfd8ea;
+}
