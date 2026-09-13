@@ -236,9 +236,20 @@ const CARDS_DATABASE = [
         type: CARD_TYPES.FORCE,
         cost: 1,
         icon: '🎲',
-        description: '随机方向移动80冲量',
+        description: '随机方向移动500冲量',
         formula: '⟨x²⟩ = 2Dt',
         effect: { impulse: 500 },
+        rarity: 'common'
+    },
+    {
+        id: 'random_leap',
+        name: '随机跳跃',
+        type: CARD_TYPES.FORCE,
+        cost: 1,
+        icon: '🦘',
+        description: '瞬移到场地随机安全位置，并获得1点能量',
+        formula: 'x′ ~ U(arena)',
+        effect: { energyGain: 1 },
         rarity: 'common'
     },
     {
@@ -341,6 +352,7 @@ class CardSystem {
             'mass_energy': 12,
             'radiation': 9,
             'brownian_motion': 12,
+            'random_leap': 10,
             'electromagnetic_cannon': 7,
             'momentum_conservation': 10,
             'magnetic_field': 8,

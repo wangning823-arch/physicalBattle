@@ -731,6 +731,39 @@ class Game {
                     });
                 }
                 break;
+            case 'random_leap':
+                // 随机跳跃：瞬移到场内随机安全位置，获得1点能量
+                if (selfPhysics) {
+                    const safeRadius = this.physics.arenaRadius * 0.75;
+                    const theta = Math.random() * Math.PI * 2;
+                    const r = Math.sqrt(Math.random()) * safeRadius;
+                    const newX = Math.cos(theta) * r;
+                    const newY = Math.sin(theta) * r;
+                    // 记录旧位置用于特效起点
+                    const oldX = selfPhysics.position.x;
+                    const oldY = selfPhysics.position.y;
+                    Matter.Body.setPosition(selfPhysics, { x: newX, y: newY });
+                    Matter.Body.setVelocity(selfPhysics, { x: 0, y: 0 });
+                    selfPlayer.energy = Math.min(selfPlayer.energy + card.effect.energyGain, GAME_CONFIG.MAX_ENERGY);
+                    // 起点消散 + 终点出现特效
+                    this.physics.addTempEffect({
+                        type: 'dash_trail',
+                        x: oldX, y: oldY,
+                        angle: Math.atan2(newY - oldY, newX - oldX),
+                        life: 400,
+                        maxLife: 400,
+                        _seed: Date.now() + playerId * 2000 + 111
+                    });
+                    this.physics.addTempEffect({
+                        type: 'charge_apply',
+                        x: newX, y: newY,
+                        charge: 0,
+                        life: 500,
+                        maxLife: 500,
+                        _seed: Date.now() + playerId * 2000 + 222
+                    });
+                }
+                break;
             case 'electromagnetic_cannon':
                 // 电磁炮：自身必须带电才能使用
                 if (selfPlayer.charge && selfPlayer.charge !== 0 && selfPhysics && aimTarget) {
