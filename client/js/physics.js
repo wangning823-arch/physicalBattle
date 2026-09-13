@@ -460,6 +460,12 @@ class PhysicsEngine {
     }
 
     addTempEffect(effect) {
+        // 稳定 id + 起始时间：供 2D/3D 特效生命周期与对象绑定
+        if (!effect._eid) {
+            this._tempEid = (this._tempEid || 0) + 1;
+            effect._eid = 'fx_' + this._tempEid + '_' + (effect._seed || Date.now());
+        }
+        if (effect._startTime === undefined) effect._startTime = Date.now();
         this.tempEffects.push(effect);
     }
 

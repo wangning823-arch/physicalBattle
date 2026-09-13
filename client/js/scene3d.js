@@ -88,9 +88,13 @@ class Scene3D {
         this.boundaryDots = null;
         this.effectsGroup = null;
         this.playersGroup = null;
+        this.tempFxGroup = null;
+        this.projectilesGroup = null;
         this._playerViews = new Map(); // playerId -> view
         this._effectMeshes = [];
         this._effectKeys = '';
+        this._tempFxViews = new Map(); // eid -> view
+        this._projViews = new Map(); // body.id -> view
         this._raf = 0;
         this._onResize = () => this.handleResize();
 
@@ -175,7 +179,7 @@ class Scene3D {
         window.addEventListener('resize', this._onResize);
         this._bindPointer();
         this.ready = true;
-        console.log('[Scene3D] 竞技场/玩家体/相机与操作映射就绪（#4）');
+        console.log('[Scene3D] 竞技场/玩家体/相机/卡牌特效占位就绪（#5）');
         return true;
     }
 
@@ -578,6 +582,14 @@ class Scene3D {
         this.playersGroup.name = 'players';
         this.scene.add(this.playersGroup);
 
+        // #5 卡牌临时特效 / 炮弹层
+        this.tempFxGroup = new THREE.Group();
+        this.tempFxGroup.name = 'tempFx';
+        this.scene.add(this.tempFxGroup);
+        this.projectilesGroup = new THREE.Group();
+        this.projectilesGroup.name = 'projectiles';
+        this.scene.add(this.projectilesGroup);
+
         this.scene.add(this.arenaGroup);
     }
 
@@ -938,6 +950,573 @@ class Scene3D {
             this.effectsGroup.add(group);
             this._effectMeshes.push(group);
         });
+    }
+
+    // ---------- #5 卡牌临时特效（tempEffects → 3D 占位）----------
+    // 覆盖 game.js 产生的主要 type：laser / momentum_blast / quantum /
+    // heat_engine_blast / ice_reset / heat_engine / charge_apply /
+    // dash_trail / mass_change / charge_transfer / energy_siphon /
+    // card_fly / radiation
+
+    /**
+     * 每帧同步 physics.tempEffects → tempFxGroup 中的占位网格。
+     * @param {Array} tempEffects
+     * @param {number} t 秒
+     */
+    syncTempEffects(tempEffects, t) {
+        if (!this.ready || !this.tempFxGroup) return;
+        const list = Array.isArray(tempEffects) ? tempEffects : [];
+        const seen = new Set();
+
+        list.forEach(fx => {
+            if (!fx || !fx.type || !fx._eid) return;
+            seen.add(fx._eid);
+
+            let view = this._tempFxViews.get(fx._eid);
+            if (!view) {
+                view = this._createTempFxView(fx);
+                if (!view) return;
+                this._tempFxViews.set(fx._eid, view);
+                this.tempFxGroup.add(view.root);
+            }
+            this._updateTempFxView(view, fx, t);
+        });
+
+        // 清理已消失的特效
+        this._tempFxViews.forEach((view, eid) => {
+            if (!seen.has(eid)) {
+                this.tempFxGroup.remove(view.root);
+                this._disposeTempFxView(view);
+                this._tempFxViews.delete(eid);
+            }
+        });
+    }
+
+    _tempFxProgress(fx, now) {
+        if (fx._startTime) {
+            const elapsed = now - fx._startTime;
+            return Math.max(0, Math.min(1, 1 - elapsed / (fx.maxLife || 1)));
+        }
+        const life = fx.life != null ? fx.life : 0;
+        const max = fx.maxLife || 1;
+        return Math.max(0, Math.min(1, life / max));
+    }
+
+    _createTempFxView(fx) {
+        const builders = {
+            laser: () => this._buildLaserFx(fx),
+            momentum_blast: () => this._buildBurstFx(fx, {
+                core: 0xffaa33, ring: 0xff6600, maxR: 55
+            }),
+            quantum: () => this._buildBurstFx(fx, {
+                core: 0xba55d3, ring: 0x9400d3, maxR: 50
+            }),
+            heat_engine_blast: () => this._buildBurstFx(fx, {
+                core: 0xffcc44, ring: 0xff4400, maxR: 90, waves: 5
+            }),
+            ice_reset: () => this._buildBurstFx(fx, {
+                core: 0x96dcff, ring: 0x64c8ff, maxR: 60
+            }),
+            heat_engine: () => this._buildBurstFx(fx, {
+                core: 0xffc800, ring: 0xff8800, maxR: 45
+            }),
+            radiation: () => this._buildBurstFx(fx, {
+                core: 0x00ff50, ring: 0x00cc40, maxR: 55
+            }),
+            charge_apply: () => this._buildChargeFx(fx),
+            mass_change: () => this._buildMassChangeFx(fx),
+            dash_trail: () => this._buildDashFx(fx),
+            energy_siphon: () => this._buildFlowFx(fx, 0x50dcff),
+            charge_transfer: () => this._buildFlowFx(fx, 0xffd700),
+            card_fly: () => this._buildCardFlyFx(fx)
+        };
+        const fn = builders[fx.type];
+        return fn ? fn() : null;
+    }
+
+    _makeFxMat(color, opacity) {
+        return new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending
+        });
+    }
+
+    _buildLaserFx(fx) {
+        const root = new THREE.Group();
+        root.name = 'fx_laser';
+
+        const beam = new THREE.Mesh(
+            new THREE.CylinderGeometry(1.2, 1.2, 1, 6, 1, true),
+            this._makeFxMat(0xff4444, 0.75)
+        );
+        const beamCore = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.45, 0.45, 1, 6, 1, true),
+            this._makeFxMat(0xffffff, 0.95)
+        );
+        root.add(beam, beamCore);
+
+        const endFlash = new THREE.Mesh(
+            new THREE.SphereGeometry(10, 12, 12),
+            this._makeFxMat(0xffaa00, 0.55)
+        );
+        root.add(endFlash);
+
+        return {
+            root,
+            type: 'laser',
+            beam,
+            beamCore,
+            endFlash,
+            start: this.worldFrom2D(fx.startX || 0, fx.startY || 0),
+            end: this.worldFrom2D(fx.endX || 0, fx.endY || 0),
+            _tmp: new THREE.Vector3(),
+            _up: new THREE.Vector3(0, 1, 0)
+        };
+    }
+
+    _buildBurstFx(fx, style) {
+        const root = new THREE.Group();
+        root.name = 'fx_burst_' + fx.type;
+        const waves = style.waves || 3;
+
+        const rings = [];
+        for (let i = 0; i < waves; i++) {
+            const ring = new THREE.Mesh(
+                new THREE.TorusGeometry(8 + i * 3, 1.6, 6, 28),
+                this._makeFxMat(style.ring, 0.55 - i * 0.08)
+            );
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.y = 2 + i * 1.2;
+            root.add(ring);
+            rings.push(ring);
+        }
+
+        const core = new THREE.Mesh(
+            new THREE.SphereGeometry(10, 12, 12),
+            this._makeFxMat(style.core, 0.7)
+        );
+        core.position.y = 6;
+        root.add(core);
+
+        const pos = this.worldFrom2D(fx.x || 0, fx.y || 0);
+        root.position.copy(pos);
+
+        return { root, type: fx.type, rings, core, maxR: style.maxR || 50 };
+    }
+
+    _buildChargeFx(fx) {
+        const root = new THREE.Group();
+        root.name = 'fx_charge';
+        const isPos = (fx.charge || 0) >= 0;
+        const color = isPos ? 0xffff00 : 0x00bfff;
+
+        const ring = new THREE.Mesh(
+            new THREE.TorusGeometry(16, 1.8, 6, 24),
+            this._makeFxMat(color, 0.7)
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 3;
+        root.add(ring);
+
+        // 电弧辐条（6 根）
+        const arcs = [];
+        for (let i = 0; i < 6; i++) {
+            const arc = new THREE.Mesh(
+                new THREE.BoxGeometry(1.2, 0.6, 14),
+                this._makeFxMat(color, 0.55)
+            );
+            const a = (i / 6) * Math.PI * 2;
+            arc.position.set(Math.cos(a) * 8, 4, Math.sin(a) * 8);
+            arc.rotation.y = -a;
+            root.add(arc);
+            arcs.push(arc);
+        }
+
+        const core = new THREE.Mesh(
+            new THREE.SphereGeometry(6, 10, 10),
+            this._makeFxMat(color, 0.5)
+        );
+        core.position.y = 8;
+        root.add(core);
+
+        const pos = this.worldFrom2D(fx.x || 0, fx.y || 0);
+        root.position.copy(pos);
+        return { root, type: 'charge_apply', ring, arcs, core, color };
+    }
+
+    _buildMassChangeFx(fx) {
+        const root = new THREE.Group();
+        root.name = 'fx_mass';
+        const heavy = (fx.massMultiplier || 1) > 1;
+        const color = heavy ? 0xff6666 : 0x66ff66;
+
+        const rings = [];
+        for (let i = 0; i < 3; i++) {
+            const ring = new THREE.Mesh(
+                new THREE.TorusGeometry(12 + i * 6, 1.2, 6, 24),
+                this._makeFxMat(color, 0.5 - i * 0.1)
+            );
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.y = 2;
+            root.add(ring);
+            rings.push(ring);
+        }
+
+        const marker = new THREE.Mesh(
+            new THREE.OctahedronGeometry(5, 0),
+            this._makeFxMat(color, 0.7)
+        );
+        marker.position.y = 14;
+        root.add(marker);
+
+        const pos = this.worldFrom2D(fx.x || 0, fx.y || 0);
+        root.position.copy(pos);
+        return { root, type: 'mass_change', rings, marker, heavy };
+    }
+
+    _buildDashFx(fx) {
+        const root = new THREE.Group();
+        root.name = 'fx_dash';
+
+        // 2D angle → 3D：屏幕 y 向下 → 世界 -z
+        const ang = fx.angle || 0;
+        const dirX = Math.cos(ang);
+        const dirZ = -Math.sin(ang);
+
+        const ghosts = [];
+        for (let i = 0; i < 4; i++) {
+            const g = new THREE.Mesh(
+                new THREE.SphereGeometry(10 - i * 1.2, 10, 10),
+                this._makeFxMat(0xc8d8ff, 0.22 - i * 0.04)
+            );
+            g.position.set(dirX * i * 8, 8, dirZ * i * 8);
+            root.add(g);
+            ghosts.push(g);
+        }
+
+        // 速度线
+        const lines = [];
+        for (let i = 0; i < 5; i++) {
+            const line = new THREE.Mesh(
+                new THREE.BoxGeometry(0.8, 0.4, 18),
+                this._makeFxMat(0xaaccff, 0.35)
+            );
+            const lateral = (i - 2) * 4;
+            // 与 dir 垂直的侧向偏移
+            const sideX = -dirZ * lateral;
+            const sideZ = dirX * lateral;
+            line.position.set(dirX * 14 + sideX, 4, dirZ * 14 + sideZ);
+            line.rotation.y = Math.atan2(dirX, dirZ);
+            root.add(line);
+            lines.push(line);
+        }
+
+        const pos = this.worldFrom2D(fx.x || 0, fx.y || 0);
+        root.position.copy(pos);
+        return { root, type: 'dash_trail', ghosts, lines };
+    }
+
+    _buildFlowFx(fx, color) {
+        const root = new THREE.Group();
+        root.name = 'fx_flow_' + fx.type;
+
+        const dots = [];
+        for (let i = 0; i < 8; i++) {
+            const dot = new THREE.Mesh(
+                new THREE.SphereGeometry(2.2, 8, 8),
+                this._makeFxMat(color, 0.75)
+            );
+            root.add(dot);
+            dots.push(dot);
+        }
+
+        const start = this.worldFrom2D(fx.startX || 0, fx.startY || 0);
+        const end = this.worldFrom2D(fx.endX || 0, fx.endY || 0);
+        start.y = 8;
+        end.y = 8;
+
+        return { root, type: fx.type, dots, start, end };
+    }
+
+    _buildCardFlyFx(fx) {
+        const root = new THREE.Group();
+        root.name = 'fx_card_fly';
+
+        const typeColors = {
+            force: 0xff6b35, electric: 0xffd700, heat: 0xef4444,
+            light: 0xa855f7, melee: 0x3b82f6
+        };
+        const color = typeColors[fx.cardType] || 0xffffff;
+
+        const card = new THREE.Mesh(
+            new THREE.BoxGeometry(14, 0.6, 20),
+            new THREE.MeshStandardMaterial({
+                color,
+                emissive: color,
+                emissiveIntensity: 0.55,
+                metalness: 0.2,
+                roughness: 0.4,
+                transparent: true,
+                opacity: 0.92
+            })
+        );
+        root.add(card);
+
+        const trail = [];
+        for (let i = 0; i < 5; i++) {
+            const p = new THREE.Mesh(
+                new THREE.SphereGeometry(2 - i * 0.25, 6, 6),
+                this._makeFxMat(color, 0.35 - i * 0.05)
+            );
+            root.add(p);
+            trail.push(p);
+        }
+
+        const start = this.worldFrom2D(fx.startX || 0, fx.startY || 0);
+        const end = this.worldFrom2D(fx.endX || 0, fx.endY || 0);
+        start.y = 12;
+        end.y = 12;
+
+        return { root, type: 'card_fly', card, trail, start, end };
+    }
+
+    _updateTempFxView(view, fx, t) {
+        const now = Date.now();
+        const progress = this._tempFxProgress(fx, now); // 1 → 0
+        const alpha = progress;
+        const expand = 1 - progress; // 0 → 1
+
+        switch (view.type) {
+            case 'laser': {
+                const s = view.start;
+                const e = view.end;
+                const mid = view._tmp.copy(s).add(e).multiplyScalar(0.5);
+                const dx = e.x - s.x;
+                const dy = e.y - s.y;
+                const dz = e.z - s.z;
+                const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+                const dir = new THREE.Vector3(dx / len, dy / len, dz / len);
+                const quat = new THREE.Quaternion().setFromUnitVectors(view._up, dir);
+                const flicker = 0.85 + 0.15 * Math.sin(t * 60);
+
+                [view.beam, view.beamCore].forEach((m, i) => {
+                    m.position.copy(mid);
+                    m.quaternion.copy(quat);
+                    m.scale.set(1, len, 1);
+                    m.material.opacity = (i === 0 ? 0.65 : 0.95) * alpha * flicker;
+                });
+                view.endFlash.position.copy(e);
+                view.endFlash.scale.setScalar(0.4 + expand * 1.8);
+                view.endFlash.material.opacity = alpha * 0.55;
+                break;
+            }
+            case 'momentum_blast':
+            case 'quantum':
+            case 'heat_engine_blast':
+            case 'ice_reset':
+            case 'heat_engine':
+            case 'radiation': {
+                view.rings.forEach((ring, i) => {
+                    const r = (8 + i * 10) + expand * view.maxR;
+                    const sc = r / Math.max(1, 8 + i * 3);
+                    ring.scale.set(sc, sc, 1);
+                    ring.material.opacity = Math.max(0, (0.55 - i * 0.08) * alpha);
+                    ring.rotation.z = t * (2 + i);
+                });
+                view.core.scale.setScalar(0.4 + expand * 1.6);
+                view.core.material.opacity = 0.7 * alpha;
+                // 量子衰减更高
+                if (view.type === 'quantum') {
+                    view.core.scale.multiplyScalar(1 + Math.sin(t * 8) * 0.1);
+                }
+                break;
+            }
+            case 'charge_apply': {
+                view.ring.scale.setScalar(0.6 + expand * 1.2);
+                view.ring.material.opacity = 0.7 * alpha;
+                view.ring.rotation.z = t * 3;
+                view.core.scale.setScalar(0.5 + expand * 0.9);
+                view.core.material.opacity = 0.5 * alpha;
+                view.arcs.forEach((arc, i) => {
+                    arc.scale.z = 0.4 + expand * 1.1;
+                    arc.material.opacity = 0.55 * alpha;
+                    const a = (i / 6) * Math.PI * 2 + t * 4;
+                    const rr = 8 + expand * 10;
+                    arc.position.set(Math.cos(a) * rr, 4, Math.sin(a) * rr);
+                    arc.rotation.y = -a;
+                });
+                break;
+            }
+            case 'mass_change': {
+                view.rings.forEach((ring, i) => {
+                    const base = 12 + i * 6;
+                    const r = view.heavy
+                        ? base * (1.4 - expand * 0.4)
+                        : base * (0.5 + expand * 0.9);
+                    const sc = r / base;
+                    ring.scale.set(sc, sc, 1);
+                    ring.material.opacity = Math.max(0, (0.5 - i * 0.1) * alpha);
+                });
+                view.marker.rotation.y = t * 3;
+                view.marker.rotation.x = t * 1.5;
+                view.marker.position.y = 14 + expand * 8;
+                view.marker.material.opacity = 0.7 * alpha;
+                break;
+            }
+            case 'dash_trail': {
+                view.ghosts.forEach((g, i) => {
+                    g.material.opacity = Math.max(0, (0.22 - i * 0.04) * alpha);
+                    g.scale.setScalar(0.7 + expand * 0.5);
+                });
+                view.lines.forEach((line, i) => {
+                    line.material.opacity = Math.max(0, 0.35 * alpha);
+                    line.scale.z = 0.5 + expand * 1.2;
+                    line.position.y = 4 + Math.sin(t * 12 + i) * 1.5;
+                });
+                break;
+            }
+            case 'energy_siphon':
+            case 'charge_transfer': {
+                const s = view.start;
+                const e = view.end;
+                // 能量点沿起点→终点流动（progress 1→0，流动感用 t 驱动）
+                view.dots.forEach((dot, i) => {
+                    const u = ((t * 1.4 + i / view.dots.length) % 1);
+                    const wave = Math.sin(u * Math.PI * 4 + t * 5) * 4;
+                    const dx = e.x - s.x;
+                    const dz = e.z - s.z;
+                    const len = Math.sqrt(dx * dx + dz * dz) || 1;
+                    const nx = -dz / len;
+                    const nz = dx / len;
+                    dot.position.set(
+                        s.x + dx * u + nx * wave,
+                        8 + Math.sin(u * Math.PI) * 6,
+                        s.z + dz * u + nz * wave
+                    );
+                    dot.material.opacity = (0.4 + 0.5 * Math.sin(u * Math.PI)) * alpha;
+                });
+                break;
+            }
+            case 'card_fly': {
+                // progress 1→0：头从 start 飞到 end
+                const u = expand; // 0 → 1
+                const s = view.start;
+                const e = view.end;
+                const mx = (s.x + e.x) / 2;
+                const mz = (s.z + e.z) / 2;
+                const dx = e.x - s.x;
+                const dz = e.z - s.z;
+                const dist = Math.sqrt(dx * dx + dz * dz) || 1;
+                // 向上拱的二次贝塞尔
+                const cx = mx - (dz / dist) * dist * 0.15;
+                const cz = mz + (dx / dist) * dist * 0.15 - dist * 0.2;
+                const cy = 20 + Math.sin(u * Math.PI) * 30;
+                const it = 1 - u;
+                const px = it * it * s.x + 2 * it * u * cx + u * u * e.x;
+                const pz = it * it * s.z + 2 * it * u * cz + u * u * e.z;
+                const py = it * it * s.y + 2 * it * u * cy + u * u * e.y;
+
+                view.card.position.set(px, py, pz);
+                view.card.rotation.y = Math.atan2(dx, dz);
+                view.card.rotation.z = Math.sin(t * 8) * 0.3;
+                view.card.material.opacity = 0.92 * Math.min(1, alpha + 0.15);
+
+                view.trail.forEach((p, i) => {
+                    const pt = Math.max(0, u - (i + 1) * 0.05);
+                    const ipt = 1 - pt;
+                    p.position.set(
+                        ipt * ipt * s.x + 2 * ipt * pt * cx + pt * pt * e.x,
+                        ipt * ipt * s.y + 2 * ipt * pt * cy + pt * pt * e.y,
+                        ipt * ipt * s.z + 2 * ipt * pt * cz + pt * pt * e.z
+                    );
+                    p.material.opacity = Math.max(0, (0.35 - i * 0.05) * alpha);
+                });
+
+                // 到达闪光（末 30%）
+                if (progress < 0.3) {
+                    view.card.scale.setScalar(1 + (0.3 - progress));
+                } else {
+                    view.card.scale.setScalar(1);
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    _disposeTempFxView(view) {
+        if (!view || !view.root) return;
+        view.root.traverse(obj => {
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) {
+                if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                else obj.material.dispose();
+            }
+        });
+    }
+
+    // ---------- #5 电磁炮炮弹 3D 占位 ----------
+
+    /**
+     * @param {Array} projectiles physics.projectiles：[{body, charge, ownerId, ...}]
+     */
+    syncProjectiles(projectiles) {
+        if (!this.ready || !this.projectilesGroup) return;
+        const list = Array.isArray(projectiles) ? projectiles : [];
+        const seen = new Set();
+
+        list.forEach(proj => {
+            if (!proj || !proj.body) return;
+            const id = proj.body.id;
+            seen.add(id);
+            let view = this._projViews.get(id);
+            if (!view) {
+                view = this._createProjectileView(proj);
+                this._projViews.set(id, view);
+                this.projectilesGroup.add(view.root);
+            }
+            const pos = proj.body.position;
+            view.root.position.set(pos.x, 4, -pos.y);
+            const charge = proj.charge || 0;
+            const isPos = charge >= 0;
+            view.core.material.color.setHex(isPos ? 0xffff44 : 0x44ffff);
+            view.glow.material.color.setHex(isPos ? 0xffaa00 : 0x0088ff);
+            view.glow.scale.setScalar(1 + 0.2 * Math.sin(Date.now() / 40));
+        });
+
+        this._projViews.forEach((view, id) => {
+            if (!seen.has(id)) {
+                this.projectilesGroup.remove(view.root);
+                this._disposeTempFxView(view);
+                this._projViews.delete(id);
+            }
+        });
+    }
+
+    _createProjectileView(proj) {
+        const root = new THREE.Group();
+        root.name = 'projectile';
+        const core = new THREE.Mesh(
+            new THREE.SphereGeometry(5, 10, 10),
+            new THREE.MeshStandardMaterial({
+                color: 0xffff44,
+                emissive: 0xffaa00,
+                emissiveIntensity: 0.9,
+                metalness: 0.3,
+                roughness: 0.3
+            })
+        );
+        const glow = new THREE.Mesh(
+            new THREE.SphereGeometry(9, 10, 10),
+            this._makeFxMat(0xffaa00, 0.35)
+        );
+        root.add(core, glow);
+        return { root, type: 'projectile', core, glow };
     }
 
     // ---------- 玩家体 3D（#3：与 physics / 玩家逻辑状态同步）----------
@@ -1338,6 +1917,9 @@ class Scene3D {
         if (gameState) {
             this.syncArenaEffects(gameState.effects);
             this.syncPlayers(gameState);
+            // #5 卡牌临时特效 + 炮弹
+            this.syncTempEffects(gameState.tempEffects, t);
+            this.syncProjectiles(gameState.projectiles);
         }
 
         // #4 相机跟随 / 轨道
@@ -1427,6 +2009,16 @@ class Scene3D {
             this._playerViews.clear();
         }
         this.playersGroup = null;
+        if (this._tempFxViews) {
+            this._tempFxViews.forEach(view => this._disposeTempFxView(view));
+            this._tempFxViews.clear();
+        }
+        this.tempFxGroup = null;
+        if (this._projViews) {
+            this._projViews.forEach(view => this._disposeTempFxView(view));
+            this._projViews.clear();
+        }
+        this.projectilesGroup = null;
         this._effectMeshes = [];
         this._effectKeys = '';
         this.container = null;
