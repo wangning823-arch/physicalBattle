@@ -314,6 +314,18 @@ class PhysicsEngine {
             const pos = proj.body.position;
             const dist = Math.sqrt(pos.x * pos.x + pos.y * pos.y);
             if (dist > this.arenaRadius || proj.life <= 0) {
+                // 出界：在边界切点打出消散闪光（2D/3D 共用 tempEffects）
+                if (dist > this.arenaRadius && dist > 0) {
+                    const angle = Math.atan2(pos.y, pos.x);
+                    this.addTempEffect({
+                        type: 'boundary_exit',
+                        x: Math.cos(angle) * this.arenaRadius,
+                        y: Math.sin(angle) * this.arenaRadius,
+                        life: 450,
+                        maxLife: 450,
+                        _seed: Date.now() + i * 17
+                    });
+                }
                 this.removeProjectile(i);
                 continue;
             }
@@ -478,6 +490,31 @@ class PhysicsEngine {
             return dist > this.arenaRadius;
         }
         return false;
+    }
+
+    /**
+     * 边缘危险度：0 安全区，→1 逼近边界，>1 已出界。
+     * 对齐 2D drawFallWarning（0.7R 起警告）。
+     */
+    getEdgeRisk(playerId) {
+        const player = this.getPlayer(playerId);
+        if (!player) return 0;
+        const dist = Math.sqrt(
+            player.position.x ** 2 + player.position.y ** 2
+        );
+        const R = this.arenaRadius || 1;
+        if (dist <= R * 0.7) return 0;
+        return (dist - R * 0.7) / (R * 0.3);
+    }
+
+    /** 全场最大边缘危险度（0–1+），供 3D 边界环联动 */
+    getMaxEdgeRisk() {
+        let max = 0;
+        for (let i = 0; i < this.players.length; i++) {
+            const r = this.getEdgeRisk(this.players[i].playerId);
+            if (r > max) max = r;
+        }
+        return max;
     }
 
     removeProjectile(index) {

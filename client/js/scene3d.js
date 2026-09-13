@@ -88,6 +88,10 @@ class Scene3D {
         this.boundaryGroup = null;
         this.energyArcGroup = null;
         this.boundaryDots = null;
+        this.dangerZone = null; // #7 边缘危险环（0.75R→R 红色警告带）
+        this.dangerMat = null;
+        this._mainRingBaseColor = null;
+        this._mainRingHotColor = null;
         this.effectsGroup = null;
         this.playersGroup = null;
         this.tempFxGroup = null;
@@ -805,6 +809,8 @@ class Scene3D {
         mainRing.rotation.x = -Math.PI / 2;
         mainRing.position.y = 0.8;
         mainRing.name = 'mainRing';
+        this._mainRingBaseColor = new THREE.Color(0x0a3a80);
+        this._mainRingHotColor = new THREE.Color(0xff2244);
         this.boundaryGroup.add(mainRing);
 
         // 内侧细环
@@ -848,6 +854,24 @@ class Scene3D {
         this.boundaryDots.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         this._dotCount = dotCount;
         this.boundaryGroup.add(this.boundaryDots);
+
+        // #7 边缘危险带：0.75R → R 的红色警示环（默认低透明，靠近时增强）
+        this.dangerMat = new THREE.MeshBasicMaterial({
+            color: 0xff2244,
+            transparent: true,
+            opacity: 0.08,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending
+        });
+        this.dangerZone = new THREE.Mesh(
+            new THREE.RingGeometry(R * 0.75, R + 1, 96),
+            this.dangerMat
+        );
+        this.dangerZone.rotation.x = -Math.PI / 2;
+        this.dangerZone.position.y = 1.1;
+        this.dangerZone.name = 'dangerZone';
+        this.boundaryGroup.add(this.dangerZone);
 
         this.arenaGroup.add(this.boundaryGroup);
     }
@@ -1064,6 +1088,9 @@ class Scene3D {
             radiation: () => this._buildBurstFx(fx, {
                 core: 0x00ff50, ring: 0x00cc40, maxR: 55
             }),
+            // #7 出界消散 / 坠落淘汰
+            boundary_exit: () => this._buildBoundaryExitFx(fx),
+            oob_fall: () => this._buildOobFallFx(fx),
             charge_apply: () => this._buildChargeFx(fx),
             mass_change: () => this._buildMassChangeFx(fx),
             dash_trail: () => this._buildDashFx(fx),
@@ -1147,6 +1174,84 @@ class Scene3D {
         root.position.copy(pos);
 
         return { root, type: fx.type, rings, core, maxR: style.maxR || 50 };
+    }
+
+    /** #7 炮弹/效果飞出边界的消散闪光 */
+    _buildBoundaryExitFx(fx) {
+        const root = new THREE.Group();
+        root.name = 'fx_boundary_exit';
+
+        const ring = new THREE.Mesh(
+            new THREE.TorusGeometry(14, 1.8, 6, 28),
+            this._makeFxMat(0xff6644, 0.7)
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 2;
+        root.add(ring);
+
+        const core = new THREE.Mesh(
+            new THREE.SphereGeometry(6, 10, 10),
+            this._makeFxMat(0xffaa66, 0.65)
+        );
+        core.position.y = 4;
+        root.add(core);
+
+        // 沿切向外抛的碎片点
+        const shards = [];
+        const ang = Math.atan2(fx.y || 0, fx.x || 0);
+        const dirX = Math.cos(ang);
+        const dirZ = -Math.sin(ang);
+        for (let i = 0; i < 5; i++) {
+            const s = new THREE.Mesh(
+                new THREE.SphereGeometry(1.8, 6, 6),
+                this._makeFxMat(0xffcc88, 0.55)
+            );
+            const lat = (i - 2) * 4;
+            s.position.set(dirX * 6 + (-dirZ) * lat, 3, dirZ * 6 + (dirX) * lat);
+            root.add(s);
+            shards.push(s);
+        }
+
+        const pos = this.worldFrom2D(fx.x || 0, fx.y || 0);
+        root.position.copy(pos);
+        return { root, type: 'boundary_exit', ring, core, shards, dirX, dirZ };
+    }
+
+    /** #7 玩家出界淘汰坠落：下沉光柱 + 冲击环 */
+    _buildOobFallFx(fx) {
+        const root = new THREE.Group();
+        root.name = 'fx_oob_fall';
+
+        // 上升光柱（随 progress 收缩）
+        const pillar = new THREE.Mesh(
+            new THREE.CylinderGeometry(10, 18, 48, 16, 1, true),
+            this._makeFxMat(0xff3355, 0.45)
+        );
+        pillar.position.y = 24;
+        root.add(pillar);
+
+        const rings = [];
+        for (let i = 0; i < 4; i++) {
+            const ring = new THREE.Mesh(
+                new THREE.TorusGeometry(16 + i * 8, 1.5, 6, 32),
+                this._makeFxMat(i % 2 === 0 ? 0xff4466 : 0xffaa44, 0.55 - i * 0.08)
+            );
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.y = 1.5 + i * 2;
+            root.add(ring);
+            rings.push(ring);
+        }
+
+        const core = new THREE.Mesh(
+            new THREE.SphereGeometry(12, 12, 12),
+            this._makeFxMat(0xff2244, 0.55)
+        );
+        core.position.y = 6;
+        root.add(core);
+
+        const pos = this.worldFrom2D(fx.x || 0, fx.y || 0);
+        root.position.copy(pos);
+        return { root, type: 'oob_fall', pillar, rings, core };
     }
 
     _buildChargeFx(fx) {
@@ -1418,6 +1523,37 @@ class Scene3D {
                     line.scale.z = 0.5 + expand * 1.2;
                     line.position.y = 4 + Math.sin(t * 12 + i) * 1.5;
                 });
+                break;
+            }
+            case 'boundary_exit': {
+                view.ring.scale.setScalar(0.5 + expand * 1.6);
+                view.ring.material.opacity = Math.max(0, 0.7 * alpha);
+                view.ring.rotation.z = t * 3;
+                view.core.scale.setScalar(0.4 + expand * 1.2);
+                view.core.material.opacity = 0.65 * alpha;
+                view.shards.forEach((s, i) => {
+                    const push = expand * 22;
+                    s.position.x = view.dirX * (6 + push) + (-view.dirZ) * (i - 2) * 4;
+                    s.position.z = view.dirZ * (6 + push) + (view.dirX) * (i - 2) * 4;
+                    s.position.y = 3 + Math.sin(t * 10 + i) * 2;
+                    s.material.opacity = Math.max(0, 0.55 * alpha);
+                });
+                break;
+            }
+            case 'oob_fall': {
+                // progress 1→0：光柱收缩、冲击环外扩、核心爆散
+                view.pillar.scale.set(1 - expand * 0.5, 0.3 + alpha * 0.9, 1 - expand * 0.5);
+                view.pillar.material.opacity = Math.max(0, 0.45 * alpha);
+                view.pillar.position.y = 24 * (0.25 + alpha * 0.75);
+                view.rings.forEach((ring, i) => {
+                    const sc = 0.6 + expand * (1.4 + i * 0.35);
+                    ring.scale.set(sc, sc, 1);
+                    ring.material.opacity = Math.max(0, (0.55 - i * 0.08) * alpha);
+                    ring.rotation.z = t * (2 + i * 0.5) * (i % 2 === 0 ? 1 : -1);
+                });
+                view.core.scale.setScalar(0.5 + expand * 1.8);
+                view.core.material.opacity = Math.max(0, 0.55 * alpha);
+                view.core.position.y = 6 - expand * 8;
                 break;
             }
             case 'energy_siphon':
@@ -1921,7 +2057,78 @@ class Scene3D {
         }
 
         // 接触光晕呼吸
-        view.glow.scale.setScalar(1 + Math.sin(t * 2) * 0.05);
+        let glowPulse = 1 + Math.sin(t * 2) * 0.05;
+
+        // #7 边缘危险：接近边界时底部光晕转红并加剧闪烁
+        const R = SCENE3D.ARENA_RADIUS;
+        let edgeRisk = 0;
+        if (pp && pp.position) {
+            const dist = Math.hypot(pp.position.x, pp.position.y);
+            if (dist > R * 0.7) {
+                edgeRisk = Math.min(1.5, (dist - R * 0.7) / (R * 0.3));
+            }
+        }
+        if (edgeRisk > 0) {
+            const mix = Math.min(1, edgeRisk);
+            const base = new THREE.Color(view.palette.main);
+            const warn = new THREE.Color(0xff2244);
+            view.glow.material.color.copy(base).lerp(warn, mix);
+            // 量子隐身时警告仍可见但压低
+            const qScale = isQuantumVisual ? 0.35 : 1;
+            view.glow.material.opacity = (0.28 + mix * 0.35 * (0.5 + 0.5 * Math.sin(t * 10))) * qScale;
+            glowPulse = 1 + mix * 0.18 * Math.sin(t * 12);
+            if (edgeRisk > 0.6) {
+                view.body.position.y = bodyY - (edgeRisk - 0.6) * 6;
+            } else {
+                view.body.position.y = bodyY;
+            }
+        } else {
+            view.glow.material.color.setHex(view.palette.main);
+            if (!isQuantumVisual) view.glow.material.opacity = 0.28;
+            view.body.position.y = bodyY;
+        }
+        view.glow.scale.setScalar(glowPulse);
+    }
+
+    /**
+     * #7 边界危险区：按全场最大边缘风险驱动危险环透明度与主环偏红。
+     * @param {Object} gameState 含 physicsPlayers / arenaRadius
+     */
+    _syncBoundaryDanger(gameState, t) {
+        if (!this.ready || !this.dangerZone || !this.dangerMat) return;
+
+        const R = (gameState && gameState.arenaRadius) || SCENE3D.ARENA_RADIUS;
+        let maxRisk = 0;
+        const list = (gameState && gameState.physicsPlayers) || [];
+        for (let i = 0; i < list.length; i++) {
+            const p = list[i];
+            if (!p || !p.position) continue;
+            const dist = Math.hypot(p.position.x, p.position.y);
+            if (dist <= R * 0.7) continue;
+            const risk = Math.min(1.5, (dist - R * 0.7) / (R * 0.3));
+            if (risk > maxRisk) maxRisk = risk;
+        }
+
+        // 危险环：常态微亮，有人靠近时脉冲增强
+        const pulse = 0.5 + 0.5 * Math.sin(t * 6);
+        const baseOp = 0.06;
+        const hotOp = 0.12 + 0.38 * Math.min(1, maxRisk) * (0.55 + 0.45 * pulse);
+        this.dangerMat.opacity = maxRisk > 0.02
+            ? Math.min(0.55, baseOp + (hotOp - baseOp) * Math.min(1, maxRisk))
+            : baseOp;
+
+        // 主边界环随风险偏红
+        if (this.boundaryGroup) {
+            const mainRing = this.boundaryGroup.getObjectByName('mainRing');
+            if (mainRing && mainRing.material && this._mainRingBaseColor) {
+                const mix = Math.min(1, maxRisk);
+                mainRing.material.emissive.copy(this._mainRingBaseColor)
+                    .lerp(this._mainRingHotColor, mix * 0.75);
+                if (mix > 0.3) {
+                    mainRing.material.emissiveIntensity = 0.85 + mix * 0.5 * pulse;
+                }
+            }
+        }
     }
 
     _disposePlayerView(view) {
@@ -2004,7 +2211,7 @@ class Scene3D {
             if (mat) mat.opacity = 0.55 + 0.25 * Math.sin(t * 2);
         }
 
-        // 主边界环呼吸发光
+        // 主边界环呼吸发光（#7：有边缘风险时叠加偏红/增亮，写在同步之后避免被覆盖）
         if (this.boundaryGroup) {
             const mainRing = this.boundaryGroup.getObjectByName('mainRing');
             if (mainRing && mainRing.material) {
@@ -2012,6 +2219,7 @@ class Scene3D {
                 mainRing.material.opacity = 0.75 + 0.15 * Math.sin(t * 2);
             }
         }
+        this._syncBoundaryDanger(gameState, t);
 
         this.renderer.render(this.scene, this.camera);
     }
@@ -2050,6 +2258,8 @@ class Scene3D {
         this.boundaryGroup = null;
         this.energyArcGroup = null;
         this.boundaryDots = null;
+        this.dangerZone = null;
+        this.dangerMat = null;
         this.effectsGroup = null;
         this.centerMark = null;
         if (this._playerViews) {

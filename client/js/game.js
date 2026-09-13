@@ -1302,6 +1302,18 @@ class Game {
     checkGameOver() {
         this.players.forEach(player => {
             if (!player.eliminated && this.physics.checkBoundary(player.id)) {
+                // 出界淘汰：在最后位置打出坠落冲击（3D 同步 tempEffects）
+                const pp = this.physics.getPlayer(player.id);
+                if (pp) {
+                    this.physics.addTempEffect({
+                        type: 'oob_fall',
+                        x: pp.position.x,
+                        y: pp.position.y,
+                        life: 900,
+                        maxLife: 900,
+                        _seed: Date.now() + player.id * 97
+                    });
+                }
                 player.eliminated = true;
                 this.physics.removePlayer(player.id);
             }
@@ -1503,7 +1515,9 @@ class Game {
             effects: this.physics.effects,
             tempEffects: this.physics.tempEffects,
             shields,
-            projectiles: this.physics.projectiles
+            projectiles: this.physics.projectiles,
+            // #7 边缘危险度（0–1+），供 3D 边界联动
+            maxEdgeRisk: this.physics.getMaxEdgeRisk()
         };
     }
 
