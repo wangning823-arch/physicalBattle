@@ -249,7 +249,9 @@ const GameUI = {
                 this.updateUI();
             }
         });
-        
+
+        this.setupScene3DInput();
+
         document.getElementById('cards-hand').addEventListener('mouseover', (e) => {
             const cardEl = e.target.closest('.card');
             if (cardEl) {
@@ -306,6 +308,14 @@ const GameUI = {
                 return;
             }
 
+            // 3D：C 切换总览/跟随视角
+            if ((e.key === 'c' || e.key === 'C') && window.Scene3DInstance && window.Scene3DInstance.ready) {
+                e.preventDefault();
+                const mode = window.Scene3DInstance.toggleCameraMode();
+                console.log('[3D] camera mode →', mode);
+                return;
+            }
+
             if (e.key >= '1' && e.key <= '9') {
                 if (this.game.isAITurn()) return;
                 if (this.game.aimingState.active || this.game.heatEngineAiming.active || this.game.targetingState.active) return;
@@ -348,6 +358,108 @@ const GameUI = {
         } else if (this.game.targetingState.active) {
             this.game.cancelTarget();
             this.updateUI();
+        }
+    },
+
+    /** #4 3D 操作映射：射线拾取瞄准/目标 + 相机输入门控 */
+    setupScene3DInput() {
+        // 若 Scene3D 尚未初始化（DOMContentLoaded 顺序），稍后再挂
+        const tryBind = () => {
+            const s3d = window.Scene3DInstance;
+            if (!s3d || !s3d.ready || s3d._mainBound) return false;
+            s3d._mainBound = true;
+
+            s3d.setInputGate({
+                isAiming: () => !!(this.game && (this.game.aimingState.active || this.game.heatEngineAiming.active)),
+                isTargeting: () => !!(this.game && this.game.targetingState.active)
+            });
+
+            s3d.onAimHover = (x, y) => {
+                this.aimingTarget = { x, y };
+            };
+
+            s3d.onAimPick = (x, y) => {
+                if (this.game.aimingState.active) {
+                    this.game.confirmAim(x, y);
+                    this.aimingTarget = null;
+                    this.updateUI();
+                } else if (this.game.heatEngineAiming.active) {
+                    this.game.confirmHeatEngineAim(x, y);
+                    this.aimingTarget = null;
+                    this.updateUI();
+                }
+            };
+
+            s3d.onTargetPick = (playerId) => {
+                if (this.game.targetingState.active && playerId != null) {
+                    this.game.confirmTarget(playerId);
+                    this.updateUI();
+                }
+            };
+
+            // 首次绑定时同步一次当前模式状态
+            this.syncScene3DInteraction();
+            return true;
+        };
+
+        if (!tryBind()) {
+            // scene3d 由 DOMContentLoaded 先注册，一般已就绪；兜底轮询几帧
+            let tries = 0;
+            const timer = setInterval(() => {
+                tries++;
+                if (tryBind() || tries > 30) clearInterval(timer);
+            }, 50);
+        }
+    },
+
+    /** 每帧同步 3D 瞄准可视化 / 目标高亮 / 跟随目标 */
+    syncScene3DInteraction() {
+        const s3d = window.Scene3DInstance;
+        if (!s3d || !s3d.ready || !this.game) return;
+
+        // 跟随当前回合玩家
+        if (s3d.cameraMode === 'follow') {
+            const cp = this.game.players[this.game.currentPlayerIndex];
+            if (cp) s3d.setFollowTarget(cp.id);
+        } else if (!s3d._orbiting) {
+            // 总览：焦点回中心（除非刚手动 focus）
+            s3d.setFollowTarget(null);
+        }
+
+        // 瞄准线
+        if ((this.game.aimingState.active || this.game.heatEngineAiming.active) && this.aimingTarget) {
+            const pid = this.game.aimingState.active
+                ? this.game.aimingState.playerId
+                : this.game.heatEngineAiming.playerId;
+            const pp = this.game.physics.getPlayer(pid);
+            if (pp) {
+                let valid = true;
+                if (this.game.aimingState.active && this.game.aimingState.card && this.game.aimingState.card.effect.radius) {
+                    const maxR = GAME_CONFIG.ARENA_RADIUS - this.game.aimingState.card.effect.radius;
+                    const d = Math.hypot(this.aimingTarget.x, this.aimingTarget.y);
+                    valid = d <= Math.max(0, maxR);
+                } else {
+                    const d = Math.hypot(this.aimingTarget.x, this.aimingTarget.y);
+                    valid = d <= GAME_CONFIG.ARENA_RADIUS;
+                }
+                s3d.setAimVisual({
+                    from: { x: pp.position.x, y: pp.position.y },
+                    to: this.aimingTarget,
+                    valid
+                });
+            }
+        } else {
+            s3d.setAimVisual(null);
+        }
+
+        // 3人模式目标选择高亮
+        if (this.game.targetingState.active) {
+            const ids = this.game.players
+                .filter(p => !p.eliminated && p.id !== this.game.targetingState.playerId)
+                .map(p => p.id);
+            s3d.setTargetHighlight(ids);
+        } else {
+            s3d.setTargetHighlight(null);
         }
     },
 
@@ -1059,6 +1171,7 @@ const GameUI = {
                 this.game.render(state, this.aimingTarget, currentPlayerPhysics);
             }
             if (window.Scene3DInstance && window.Scene3DInstance.ready) {
+                this.syncScene3DInteraction();
                 window.Scene3DInstance.render(deltaTime || 16.67, state);
             }
 

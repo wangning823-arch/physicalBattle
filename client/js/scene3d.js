@@ -8,7 +8,19 @@ const SCENE3D = {
     ARENA_RADIUS: 300, // 与 GAME_CONFIG.ARENA_RADIUS 对齐（2D 逻辑单位 → 3D，1:1）
     CAMERA_POS: { x: 0, y: 420, z: 380 },
     LOOK_AT: { x: 0, y: 0, z: 0 },
-    DEBUG_AXES: false
+    DEBUG_AXES: false,
+    // #4 相机默认轨道参数（俯视斜角总览）
+    CAMERA_MODES: {
+        overview: { radius: 520, pitch: 0.72, yaw: 0.35 }, // pitch: 弧度，从水平面向上抬
+        follow: { radius: 340, pitch: 0.95, yaw: 0.35 }
+    },
+    CAMERA_MIN_RADIUS: 180,
+    CAMERA_MAX_RADIUS: 900,
+    CAMERA_MIN_PITCH: 0.25,
+    CAMERA_MAX_PITCH: 1.35,
+    FOLLOW_LERP: 0.08,
+    ORBIT_DRAG_SPEED: 0.0055,
+    ZOOM_SPEED: 0.12
 };
 
 // 玩家配色（对齐 renderer.drawPlayer 的 playerColors）
@@ -81,6 +93,27 @@ class Scene3D {
         this._effectKeys = '';
         this._raf = 0;
         this._onResize = () => this.handleResize();
+
+        // #4 相机与操作映射
+        this.cameraMode = 'overview'; // overview | follow
+        this._camYaw = SCENE3D.CAMERA_MODES.overview.yaw;
+        this._camPitch = SCENE3D.CAMERA_MODES.overview.pitch;
+        this._camRadius = SCENE3D.CAMERA_MODES.overview.radius;
+        this._camFocus = new THREE.Vector3(0, 0, 0);
+        this._camFocusTarget = new THREE.Vector3(0, 0, 0);
+        this._orbiting = false;
+        this._lastPointer = { x: 0, y: 0 };
+        this._followPlayerId = null;
+        this._aimVisual = null; // { line, ring, marker }
+        this._targetRings = []; // 目标选择高亮
+        this._raycaster = null;
+        this._groundPlane = null;
+        this._ndc = null;
+        this._bindPointer = this._bindPointer.bind(this);
+        this._unbindPointer = this._unbindPointer.bind(this);
+        this.onAimPick = null;   // (gameX, gameY) => void  —— 2D 逻辑坐标
+        this.onTargetPick = null; // (playerId) => void
+        this.onOrbitChange = null; // 环绕开始/结束（瞄准时禁用拖拽旋转）
     }
 
     static isSupported() {
@@ -131,6 +164,7 @@ class Scene3D {
 
         this.createLights();
         this.createArena();
+        this._initCameraRig();
         if (SCENE3D.DEBUG_AXES) {
             const axes = new THREE.AxesHelper(80);
             axes.position.y = 1.2;
@@ -139,9 +173,371 @@ class Scene3D {
 
         this.clock = new THREE.Clock();
         window.addEventListener('resize', this._onResize);
+        this._bindPointer();
         this.ready = true;
-        console.log('[Scene3D] 竞技场与玩家体 3D 就绪（#3）');
+        console.log('[Scene3D] 竞技场/玩家体/相机与操作映射就绪（#4）');
         return true;
+    }
+
+    // ---------- #4 相机 rig / 视角 ----------
+
+    _initCameraRig() {
+        this._raycaster = new THREE.Raycaster();
+        this._groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        this._ndc = new THREE.Vector2();
+        this._aimVisual = this._createAimVisual();
+        this.scene.add(this._aimVisual.root);
+    }
+
+    _createAimVisual() {
+        const root = new THREE.Group();
+        root.name = 'aimVisual';
+        root.visible = false;
+
+        const lineGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(0, 0, 1)
+        ]);
+        const lineMat = new THREE.LineDashedMaterial({
+            color: 0xffd700,
+            dashSize: 12,
+            gapSize: 8,
+            transparent: true,
+            opacity: 0.95
+        });
+        const line = new THREE.Line(lineGeo, lineMat);
+        line.computeLineDistances();
+        line.position.y = 1.2;
+        line.name = 'aimLine';
+        root.add(line);
+
+        const ring = new THREE.Mesh(
+            new THREE.RingGeometry(12, 18, 32),
+            new THREE.MeshBasicMaterial({
+                color: 0xffd700,
+                transparent: true,
+                opacity: 0.7,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            })
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.9;
+        ring.name = 'aimRing';
+        root.add(ring);
+
+        const marker = new THREE.Mesh(
+            new THREE.SphereGeometry(4, 12, 12),
+            new THREE.MeshBasicMaterial({
+                color: 0xffd700,
+                transparent: true,
+                opacity: 0.85,
+                depthWrite: false
+            })
+        );
+        marker.position.y = 2;
+        marker.name = 'aimMarker';
+        root.add(marker);
+
+        return { root, line, ring, marker, lineMat, ringMat: ring.material, markerMat: marker.material };
+    }
+
+    /** 切换相机模式：overview（总览）/ follow（跟随当前玩家） */
+    setCameraMode(mode) {
+        if (mode !== 'overview' && mode !== 'follow') return this.cameraMode;
+        this.cameraMode = mode;
+        const preset = SCENE3D.CAMERA_MODES[mode] || SCENE3D.CAMERA_MODES.overview;
+        this._camRadius = preset.radius;
+        this._camPitch = preset.pitch;
+        this._camYaw = preset.yaw;
+        return this.cameraMode;
+    }
+
+    toggleCameraMode() {
+        return this.setCameraMode(this.cameraMode === 'overview' ? 'follow' : 'overview');
+    }
+
+    /** 设置跟随目标：2D 逻辑坐标点或 playerId；null 清除并回中心（总览） */
+    setFollowTarget(target) {
+        if (target == null) {
+            this._followPlayerId = null;
+            if (this.cameraMode === 'overview') {
+                this._camFocusTarget.set(0, 0, 0);
+            }
+            return;
+        }
+        if (typeof target === 'number') {
+            this._followPlayerId = target;
+            return;
+        }
+        if (typeof target.x === 'number' && typeof target.y === 'number') {
+            this._followPlayerId = null;
+            this._camFocusTarget.set(target.x, 0, -target.y);
+        }
+    }
+
+    /** 更新相机：orbit 缓动 + 可选跟随当前玩家 */
+    updateCamera(deltaMs, gameState) {
+        if (!this.ready || !this.camera) return;
+        const k = Math.min(1, (deltaMs || 16.67) / 16.67);
+
+        // 跟随模式：焦点对准当前玩家
+        if (this.cameraMode === 'follow') {
+            let focusX = 0, focusZ = 0;
+            if (this._followPlayerId != null && gameState && Array.isArray(gameState.physicsPlayers)) {
+                const pp = gameState.physicsPlayers.find(p => p.playerId === this._followPlayerId);
+                if (pp && pp.position) {
+                    focusX = pp.position.x;
+                    focusZ = -pp.position.y;
+                }
+            }
+            this._camFocusTarget.set(focusX, 0, focusZ);
+        } else if (this._followPlayerId == null) {
+            // 总览模式下若无显式 focus，缓动回中心
+            // （setFollowTarget 点坐标时保持一段时间由外部控制；此处不强制回中）
+        }
+
+        const lerp = SCENE3D.FOLLOW_LERP * k;
+        this._camFocus.lerp(this._camFocusTarget, Math.min(1, lerp * 2));
+
+        // 球坐标 → 笛卡尔
+        const pitch = this._camPitch;
+        const yaw = this._camYaw;
+        const r = this._camRadius;
+        const cy = Math.sin(pitch) * r;
+        const ch = Math.cos(pitch) * r;
+        this.camera.position.set(
+            this._camFocus.x + Math.sin(yaw) * ch,
+            this._camFocus.y + cy,
+            this._camFocus.z + Math.cos(yaw) * ch
+        );
+        this.camera.lookAt(this._camFocus.x, this._camFocus.y, this._camFocus.z);
+    }
+
+    // ---------- #4 指针：环绕 / 缩放 / 拾取 ----------
+
+    _bindPointer() {
+        const el = this.renderer && this.renderer.domElement;
+        if (!el) return;
+        // 预绑定，保证 removeEventListener 可匹配
+        this._onPointerDown = this._onPointerDown.bind(this);
+        this._onPointerMove = this._onPointerMove.bind(this);
+        this._onPointerUp = this._onPointerUp.bind(this);
+        this._onWheel = this._onWheel.bind(this);
+        this._onContextMenu = this._onContextMenu.bind(this);
+        el.style.touchAction = 'none';
+        el.addEventListener('pointerdown', this._onPointerDown);
+        el.addEventListener('pointermove', this._onPointerMove);
+        el.addEventListener('pointerup', this._onPointerUp);
+        el.addEventListener('pointercancel', this._onPointerUp);
+        el.addEventListener('wheel', this._onWheel, { passive: false });
+        el.addEventListener('contextmenu', this._onContextMenu);
+    }
+
+    _unbindPointer() {
+        const el = this.renderer && this.renderer.domElement;
+        if (!el) return;
+        if (this._onPointerDown) el.removeEventListener('pointerdown', this._onPointerDown);
+        if (this._onPointerMove) el.removeEventListener('pointermove', this._onPointerMove);
+        if (this._onPointerUp) {
+            el.removeEventListener('pointerup', this._onPointerUp);
+            el.removeEventListener('pointercancel', this._onPointerUp);
+        }
+        if (this._onWheel) el.removeEventListener('wheel', this._onWheel);
+        if (this._onContextMenu) el.removeEventListener('contextmenu', this._onContextMenu);
+    }
+
+    _isAimingActive() {
+        return !!(this._inputGate && this._inputGate.isAiming && this._inputGate.isAiming());
+    }
+
+    /** 外部注入：瞄准中禁用环绕拖拽 */
+    setInputGate(gate) {
+        this._inputGate = gate || null;
+    }
+
+    _onContextMenu(e) {
+        e.preventDefault();
+    }
+
+    _onPointerDown(e) {
+        // 中键 / 右键：环绕；瞄准中仅左键拾取
+        if (this._isAimingActive()) {
+            if (e.button === 0) this._handlePick(e);
+            return;
+        }
+        if (e.button === 2 || e.button === 1) {
+            this._orbiting = true;
+            this._lastPointer.x = e.clientX;
+            this._lastPointer.y = e.clientY;
+            if (this.onOrbitChange) this.onOrbitChange(true);
+            e.preventDefault();
+            return;
+        }
+        if (e.button === 0) this._handlePick(e);
+    }
+
+    _onPointerMove(e) {
+        if (this._orbiting) {
+            const dx = e.clientX - this._lastPointer.x;
+            const dy = e.clientY - this._lastPointer.y;
+            this._lastPointer.x = e.clientX;
+            this._lastPointer.y = e.clientY;
+            this._camYaw -= dx * SCENE3D.ORBIT_DRAG_SPEED;
+            this._camPitch += dy * SCENE3D.ORBIT_DRAG_SPEED;
+            this._camPitch = Math.max(SCENE3D.CAMERA_MIN_PITCH, Math.min(SCENE3D.CAMERA_MAX_PITCH, this._camPitch));
+            e.preventDefault();
+            return;
+        }
+        // 瞄准中：移动更新预览点（与 2D mousemove 对齐）
+        if (this._isAimingActive() && typeof this.onAimHover === 'function') {
+            const pt = this.pickGroundPoint(e.clientX, e.clientY);
+            if (pt) this.onAimHover(pt.x, pt.y);
+        }
+    }
+
+    _onPointerUp(e) {
+        if (this._orbiting) {
+            this._orbiting = false;
+            if (this.onOrbitChange) this.onOrbitChange(false);
+        }
+    }
+
+    _onWheel(e) {
+        e.preventDefault();
+        const dir = e.deltaY > 0 ? 1 : -1;
+        this._camRadius *= (1 + dir * SCENE3D.ZOOM_SPEED);
+        this._camRadius = Math.max(SCENE3D.CAMERA_MIN_RADIUS, Math.min(SCENE3D.CAMERA_MAX_RADIUS, this._camRadius));
+    }
+
+    /** 拾取：瞄准确认 / 目标玩家选择 */
+    _handlePick(e) {
+        if (!this.ready) return;
+        if (this._isAimingActive()) {
+            const pt = this.pickGroundPoint(e.clientX, e.clientY);
+            if (pt && typeof this.onAimPick === 'function') {
+                this.onAimPick(pt.x, pt.y);
+            }
+            return;
+        }
+        if (this._inputGate && this._inputGate.isTargeting && this._inputGate.isTargeting()) {
+            const pid = this.pickPlayer(e.clientX, e.clientY);
+            if (pid != null && typeof this.onTargetPick === 'function') {
+                this.onTargetPick(pid);
+            }
+        }
+    }
+
+    /** 屏幕点 → 地面 y=0 平面交点 → 2D 逻辑坐标 {x,y}（y = -worldZ）；无交点返回 null */
+    pickGroundPoint(clientX, clientY) {
+        if (!this.ready || !this.camera || !this.renderer) return null;
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return null;
+        this._ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+        this._ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+        this._raycaster.setFromCamera(this._ndc, this.camera);
+        const hit = new THREE.Vector3();
+        const ok = this._raycaster.ray.intersectPlane(this._groundPlane, hit);
+        if (!ok) return null;
+        return { x: hit.x, y: -hit.z };
+    }
+
+    /** 屏幕点 → 命中的玩家 playerId（按屏幕距离近似，兼容隐藏量子体） */
+    pickPlayer(clientX, clientY) {
+        if (!this.ready || !this.camera || !this.renderer) return null;
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return null;
+        const mx = clientX - rect.left;
+        const my = clientY - rect.top;
+        let bestId = null;
+        let bestDist = 45; // 与 2D CLICK_RADIUS 一致
+        this._playerViews.forEach((view, id) => {
+            if (!view.root.visible) return;
+            const wp = new THREE.Vector3();
+            view.root.getWorldPosition(wp);
+            wp.y = view.body ? view.body.getWorldPosition(new THREE.Vector3()).y : wp.y;
+            const ndc = wp.clone().project(this.camera);
+            const sx = (ndc.x * 0.5 + 0.5) * rect.width;
+            const sy = (-ndc.y * 0.5 + 0.5) * rect.height;
+            const d = Math.hypot(sx - mx, sy - my);
+            if (d < bestDist) {
+                bestDist = d;
+                bestId = id;
+            }
+        });
+        return bestId;
+    }
+
+    /**
+     * 更新瞄准可视化。
+     * @param {Object|null} opts { from: {x,y}, to: {x,y}, valid: boolean } 2D 逻辑坐标；null 隐藏
+     */
+    setAimVisual(opts) {
+        if (!this.ready || !this._aimVisual) return;
+        const v = this._aimVisual;
+        if (!opts || !opts.from || !opts.to) {
+            v.root.visible = false;
+            return;
+        }
+        v.root.visible = true;
+        const ax = opts.from.x;
+        const az = -opts.from.y;
+        const bx = opts.to.x;
+        const bz = -opts.to.y;
+        const valid = opts.valid !== false;
+        const color = valid ? 0xffd700 : 0xff2222;
+
+        v.lineMat.color.setHex(color);
+        v.ringMat.color.setHex(color);
+        v.markerMat.color.setHex(color);
+
+        const pos = v.line.geometry.attributes.position;
+        pos.setXYZ(0, ax, 0, az);
+        pos.setXYZ(1, bx, 0, bz);
+        pos.needsUpdate = true;
+        v.line.geometry.computeBoundingSphere();
+        v.line.computeLineDistances();
+
+        v.ring.position.set(bx, 0.9, bz);
+        v.marker.position.set(bx, 2, bz);
+
+        const t = this.clock ? this.clock.getElapsedTime() : 0;
+        const pulse = 1 + Math.sin(t * 4) * 0.2;
+        v.ring.scale.set(pulse, pulse, 1);
+        v.ringMat.opacity = 0.5 + 0.25 * Math.sin(t * 6);
+    }
+
+    /** 目标选择：高亮可选玩家地面环 */
+    setTargetHighlight(activePlayerIds) {
+        if (!this.ready || !this.playersGroup) return;
+        // 清理旧环
+        this._targetRings.forEach(r => {
+            this.scene.remove(r);
+            if (r.geometry) r.geometry.dispose();
+            if (r.material) r.material.dispose();
+        });
+        this._targetRings = [];
+        if (!activePlayerIds || !activePlayerIds.length) return;
+
+        activePlayerIds.forEach(id => {
+            const view = this._playerViews.get(id);
+            if (!view) return;
+            const ring = new THREE.Mesh(
+                new THREE.RingGeometry(PLAYER3D_BODY_RADIUS + 4, PLAYER3D_BODY_RADIUS + 10, 32),
+                new THREE.MeshBasicMaterial({
+                    color: 0x00ffcc,
+                    transparent: true,
+                    opacity: 0.75,
+                    side: THREE.DoubleSide,
+                    depthWrite: false
+                })
+            );
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.set(view.root.position.x, 0.7, view.root.position.z);
+            ring.name = `targetRing_${id}`;
+            this.scene.add(ring);
+            this._targetRings.push(ring);
+        });
     }
 
     createLights() {
@@ -171,8 +567,7 @@ class Scene3D {
         this.createOuterFloor(R);
         this.createArenaFloor(R);
         this.createGrid(R);
-        this.createBoundary(R);
-        this.createEnergyArcs(R);
+        this.createBoundary(R); // 含能量弧 energyArcGroup（原 createEnergyArcs 调用为死引用）
         this.createCenterMark();
 
         this.effectsGroup = new THREE.Group();
@@ -945,6 +1340,9 @@ class Scene3D {
             this.syncPlayers(gameState);
         }
 
+        // #4 相机跟随 / 轨道
+        this.updateCamera(deltaMs, gameState);
+
         // 中心环呼吸
         if (this.centerMark) {
             const s = 1 + Math.sin(t * 2) * 0.06;
@@ -991,6 +1389,9 @@ class Scene3D {
     dispose() {
         if (!this.ready) return;
         window.removeEventListener('resize', this._onResize);
+        this._unbindPointer();
+        this.setAimVisual(null);
+        this.setTargetHighlight(null);
         if (this._raf) cancelAnimationFrame(this._raf);
         if (this.scene) {
             this.scene.traverse((obj) => {
