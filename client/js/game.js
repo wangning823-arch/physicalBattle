@@ -26,6 +26,11 @@ class Game {
         this.aiPlayer = null;
     }
 
+    /** 3D 渲染是否启用（Scene3D 就绪时跳过 2D 绘制） */
+    is3DRender() {
+        return !!(window.Scene3DInstance && window.Scene3DInstance.ready);
+    }
+
     initGame(mode = 'pvp', difficulty = 'normal') {
         this.gameMode = mode;
         this.playerCount = mode === '3pvp' ? 3 : 2;

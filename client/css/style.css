@@ -467,12 +467,32 @@ body {
     background: rgba(0, 0, 0, 0.3);
     border-radius: 15px;
     overflow: hidden;
+    position: relative;
 }
 
 #game-canvas {
     border-radius: 10px;
     width: 800px;
     height: 600px;
+}
+
+/* 3D 场景挂载层（?render=3d 时启用） */
+#three-container {
+    width: 800px;
+    height: 600px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #0a0a1a;
+    display: none;
+}
+
+#three-container:not(.hidden) {
+    display: block;
+}
+
+#three-canvas {
+    border-radius: 10px;
+    outline: none;
 }
 
 #hand-container {

@@ -1055,7 +1055,12 @@ const GameUI = {
             const currentPlayerPhysics = state.physicsPlayers.find(p =>
                 p.playerId === this.game.players[this.game.currentPlayerIndex].id
             );
-            this.game.render(state, this.aimingTarget, currentPlayerPhysics);
+            if (!this.game.is3DRender()) {
+                this.game.render(state, this.aimingTarget, currentPlayerPhysics);
+            }
+            if (window.Scene3DInstance && window.Scene3DInstance.ready) {
+                window.Scene3DInstance.render(deltaTime || 16.67);
+            }
 
             this.updatePhysicsParamsPanel();
 
