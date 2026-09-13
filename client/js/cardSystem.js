@@ -176,6 +176,17 @@ const CARDS_DATABASE = [
         rarity: 'common'
     },
     {
+        id: 'charge_transfer',
+        name: '电荷转移',
+        type: CARD_TYPES.ELECTRIC,
+        cost: 1,
+        icon: '🔄',
+        description: '将对手的电荷转移到自己身上',
+        formula: 'q₁′ = q₁ + q₂, q₂′ = 0',
+        effect: { duration: 2, targetEnemy: true },
+        rarity: 'common'
+    },
+    {
         id: 'quantum_superposition',
         name: '量子叠加',
         type: CARD_TYPES.MELEE,
@@ -313,6 +324,7 @@ class CardSystem {
             'charge_attach_negative': 8,
             'self_charge': 8,
             'self_charge_negative': 8,
+            'charge_transfer': 8,
             'quantum_superposition': 5,
             'heat_engine': 7,
             'mass_energy': 12,

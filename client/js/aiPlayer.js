@@ -232,6 +232,16 @@ class AIPlayer {
             case 'self_charge_negative':
                 score = player.charge === 0 ? 65 : 25;
                 break;
+            case 'charge_transfer':
+                if (targetPlayer && targetPlayer.charge && targetPlayer.charge !== 0) {
+                    score = 75;
+                    // 抢电磁炮/磁场资源时更香
+                    if (Math.abs(targetPlayer.charge) >= 2) score += 10;
+                    if (player.charge && player.charge !== 0) score -= 15;
+                } else {
+                    score = 0;
+                }
+                break;
             case 'electromagnetic_cannon':
                 score = (player.charge && player.charge !== 0) ? 80 : 0;
                 break;

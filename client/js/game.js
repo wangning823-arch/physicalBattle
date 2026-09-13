@@ -494,6 +494,33 @@ class Game {
                     });
                 }
                 break;
+            case 'charge_transfer':
+                // 将对手电荷转移到自己身上
+                if (targetPlayer && !targetPlayer.eliminated) {
+                    const transferred = targetPlayer.charge || 0;
+                    if (transferred !== 0) {
+                        selfPlayer.charge = (selfPlayer.charge || 0) + transferred;
+                        selfPlayer.chargeDuration = Math.max(
+                            selfPlayer.chargeDuration || 0,
+                            targetPlayer.chargeDuration || card.effect.duration
+                        );
+                        targetPlayer.charge = 0;
+                        targetPlayer.chargeDuration = 0;
+                    }
+                    if (selfPhysics && targetPhysics) {
+                        this.physics.addTempEffect({
+                            type: 'charge_transfer',
+                            startX: targetPhysics.position.x,
+                            startY: targetPhysics.position.y,
+                            endX: selfPhysics.position.x,
+                            endY: selfPhysics.position.y,
+                            life: 800,
+                            maxLife: 800,
+                            _seed: Date.now() + 6666
+                        });
+                    }
+                }
+                break;
             case 'ice_zone':
                 // 冰霜地带 - 重置对方热机能量
                 if (targetPlayer && targetPlayer.heatEngine && targetPlayer.heatEngine.active) {
