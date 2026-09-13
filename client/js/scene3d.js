@@ -104,6 +104,23 @@ class Scene3D {
         this._raf = 0;
         this._onResize = () => this.handleResize();
 
+        // #9 性能：缓存高频引用，避免每帧 getObjectByName / 重复分配
+        this._mainRing = null;
+        this._arcA = null;
+        this._arcB = null;
+        this._dotMat4 = new THREE.Matrix4();
+        this._tmpColor = new THREE.Color();
+        this._warnColor = new THREE.Color(0xff2244);
+        this._sharedRes = []; // 跨视图共享的 geometry/material，仅在 dispose 时释放
+        this._targetRingKey = null;
+        this._targetRingGeo = null;
+        this._targetRingMat = null;
+        this._heatDotGeo = null;
+        this._heatDotMat = null;
+        this._stakeGeo = null;
+        this._stakeMat = null;
+        this._panelHandlers = [];
+
         // #4 相机与操作映射
         this.cameraMode = 'overview'; // overview | follow
         this._camYaw = SCENE3D.CAMERA_MODES.overview.yaw;
@@ -556,34 +573,53 @@ class Scene3D {
         v.ringMat.opacity = 0.5 + 0.25 * Math.sin(t * 6);
     }
 
-    /** 目标选择：高亮可选玩家地面环 */
+    /** 目标选择：高亮可选玩家地面环（#9 相同 ID 集合只挪位置，不重建） */
     setTargetHighlight(activePlayerIds) {
         if (!this.ready || !this.playersGroup) return;
-        // 清理旧环
-        this._targetRings.forEach(r => {
-            this.scene.remove(r);
-            if (r.geometry) r.geometry.dispose();
-            if (r.material) r.material.dispose();
-        });
-        this._targetRings = [];
-        if (!activePlayerIds || !activePlayerIds.length) return;
 
-        activePlayerIds.forEach(id => {
+        const ids = Array.isArray(activePlayerIds) ? activePlayerIds : [];
+        const key = ids.length ? ids.slice().sort((a, b) => a - b).join(',') : '';
+
+        if (key === this._targetRingKey) {
+            this._targetRings.forEach(ring => {
+                const pid = ring.userData && ring.userData.playerId;
+                const view = this._playerViews.get(pid);
+                if (view) ring.position.set(view.root.position.x, 0.7, view.root.position.z);
+            });
+            return;
+        }
+        this._targetRingKey = key;
+
+        // 清理旧环（共享材质/几何不 dispose）
+        this._targetRings.forEach(r => this.scene.remove(r));
+        this._targetRings = [];
+        if (!ids.length) return;
+
+        if (!this._targetRingGeo) {
+            this._targetRingGeo = new THREE.RingGeometry(
+                PLAYER3D_BODY_RADIUS + 4,
+                PLAYER3D_BODY_RADIUS + 10,
+                32
+            );
+            this._targetRingMat = new THREE.MeshBasicMaterial({
+                color: 0x00ffcc,
+                transparent: true,
+                opacity: 0.75,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            this._sharedRes.push(this._targetRingGeo, this._targetRingMat);
+        }
+
+        ids.forEach(id => {
             const view = this._playerViews.get(id);
             if (!view) return;
-            const ring = new THREE.Mesh(
-                new THREE.RingGeometry(PLAYER3D_BODY_RADIUS + 4, PLAYER3D_BODY_RADIUS + 10, 32),
-                new THREE.MeshBasicMaterial({
-                    color: 0x00ffcc,
-                    transparent: true,
-                    opacity: 0.75,
-                    side: THREE.DoubleSide,
-                    depthWrite: false
-                })
-            );
+            const ring = new THREE.Mesh(this._targetRingGeo, this._targetRingMat);
             ring.rotation.x = -Math.PI / 2;
             ring.position.set(view.root.position.x, 0.7, view.root.position.z);
             ring.name = `targetRing_${id}`;
+            ring.userData = ring.userData || {};
+            ring.userData.playerId = id;
             this.scene.add(ring);
             this._targetRings.push(ring);
         });
@@ -748,7 +784,7 @@ class Scene3D {
         this.arenaGroup.add(rimStep);
     }
 
-    /** 轻量网格线（叠加在纹理之上，便于后续按需隐藏/调色） */
+    /** 轻量网格线：同心圆+放射线合并为 LineSegments，压 draw call（#9） */
     createGrid(R) {
         this.gridGroup = new THREE.Group();
         this.gridGroup.name = 'grid';
@@ -764,25 +800,37 @@ class Scene3D {
             opacity: 0.08
         });
 
+        // 同心圆 → 一段 LineSegments（每弧段 2 点）
+        const circlePts = [];
         for (let r = 50; r < R; r += 50) {
-            const pts = [];
-            const seg = 64;
-            for (let i = 0; i <= seg; i++) {
-                const a = (i / seg) * Math.PI * 2;
-                pts.push(new THREE.Vector3(Math.cos(a) * r, 0.35, Math.sin(a) * r));
+            const seg = 48;
+            for (let i = 0; i < seg; i++) {
+                const a0 = (i / seg) * Math.PI * 2;
+                const a1 = ((i + 1) / seg) * Math.PI * 2;
+                circlePts.push(
+                    new THREE.Vector3(Math.cos(a0) * r, 0.35, Math.sin(a0) * r),
+                    new THREE.Vector3(Math.cos(a1) * r, 0.35, Math.sin(a1) * r)
+                );
             }
-            const geo = new THREE.BufferGeometry().setFromPoints(pts);
-            this.gridGroup.add(new THREE.Line(geo, matCircle));
         }
+        const circleGeo = new THREE.BufferGeometry().setFromPoints(circlePts);
+        const circleLine = new THREE.LineSegments(circleGeo, matCircle);
+        circleLine.name = 'gridCircles';
+        this.gridGroup.add(circleLine);
 
+        // 12 条放射线 → 一段 LineSegments
+        const radialPts = [];
         for (let i = 0; i < 12; i++) {
             const a = (i / 12) * Math.PI * 2;
-            const geo = new THREE.BufferGeometry().setFromPoints([
+            radialPts.push(
                 new THREE.Vector3(0, 0.35, 0),
                 new THREE.Vector3(Math.cos(a) * R, 0.35, Math.sin(a) * R)
-            ]);
-            this.gridGroup.add(new THREE.Line(geo, matRadial));
+            );
         }
+        const radialGeo = new THREE.BufferGeometry().setFromPoints(radialPts);
+        const radialLine = new THREE.LineSegments(radialGeo, matRadial);
+        radialLine.name = 'gridRadials';
+        this.gridGroup.add(radialLine);
 
         this.arenaGroup.add(this.gridGroup);
     }
@@ -809,6 +857,7 @@ class Scene3D {
         mainRing.rotation.x = -Math.PI / 2;
         mainRing.position.y = 0.8;
         mainRing.name = 'mainRing';
+        this._mainRing = mainRing;
         this._mainRingBaseColor = new THREE.Color(0x0a3a80);
         this._mainRingHotColor = new THREE.Color(0xff2244);
         this.boundaryGroup.add(mainRing);
@@ -833,10 +882,12 @@ class Scene3D {
 
         const arc1 = this._makeArcSegment(R - 4, Math.PI * 1.2, 0x4488ff, 0.22, 7);
         arc1.name = 'arcA';
+        this._arcA = arc1;
         this.energyArcGroup.add(arc1);
 
         const arc2 = this._makeArcSegment(R + 2, Math.PI * 0.9, 0x66aaff, 0.15, 5);
         arc2.name = 'arcB';
+        this._arcB = arc2;
         this.energyArcGroup.add(arc2);
 
         this.boundaryGroup.add(this.energyArcGroup);
@@ -1771,7 +1822,7 @@ class Scene3D {
         shield.visible = false;
         root.add(shield);
 
-        // 定位锚地面环 + 四桩（默认隐藏）
+        // 定位锚地面环 + 四桩（默认隐藏；#9 共享 stake 几何/材质）
         const anchorGroup = new THREE.Group();
         anchorGroup.name = 'anchor';
         anchorGroup.position.y = 0.6;
@@ -1785,16 +1836,18 @@ class Scene3D {
         const anchorRing = new THREE.Mesh(new THREE.RingGeometry(R + 8, R + 12, 28), chainMat);
         anchorRing.rotation.x = -Math.PI / 2;
         anchorGroup.add(anchorRing);
+        if (!this._stakeGeo) {
+            this._stakeGeo = new THREE.BoxGeometry(4, 3, 10);
+            this._stakeMat = new THREE.MeshStandardMaterial({
+                color: 0xcd853f,
+                metalness: 0.4,
+                roughness: 0.6
+            });
+            this._sharedRes.push(this._stakeGeo, this._stakeMat);
+        }
         for (let i = 0; i < 4; i++) {
             const a = (i / 4) * Math.PI * 2;
-            const stake = new THREE.Mesh(
-                new THREE.BoxGeometry(4, 3, 10),
-                new THREE.MeshStandardMaterial({
-                    color: 0xcd853f,
-                    metalness: 0.4,
-                    roughness: 0.6
-                })
-            );
+            const stake = new THREE.Mesh(this._stakeGeo, this._stakeMat);
             stake.position.set(Math.cos(a) * (R + 16), 1.5, Math.sin(a) * (R + 16));
             stake.rotation.y = -a;
             anchorGroup.add(stake);
@@ -1816,19 +1869,23 @@ class Scene3D {
         chargeRing.visible = false;
         root.add(chargeRing);
 
-        // 热机充能粒子（占位：沿轨道的小球，#5 再细化）
+        // 热机充能粒子（占位：沿轨道的小球；#9 共享几何/材质）
         const heatGroup = new THREE.Group();
         heatGroup.name = 'heat';
         heatGroup.position.y = body.position.y + R + 10;
         heatGroup.visible = false;
-        const heatDots = [];
-        for (let i = 0; i < 5; i++) {
-            const mat = new THREE.MeshBasicMaterial({
+        if (!this._heatDotGeo) {
+            this._heatDotGeo = new THREE.SphereGeometry(2.2, 8, 8);
+            this._heatDotMat = new THREE.MeshBasicMaterial({
                 color: 0xff6600,
                 transparent: true,
                 opacity: 0.9
             });
-            const d = new THREE.Mesh(new THREE.SphereGeometry(2.2, 8, 8), mat);
+            this._sharedRes.push(this._heatDotGeo, this._heatDotMat);
+        }
+        const heatDots = [];
+        for (let i = 0; i < 5; i++) {
+            const d = new THREE.Mesh(this._heatDotGeo, this._heatDotMat);
             heatGroup.add(d);
             heatDots.push(d);
         }
@@ -2070,9 +2127,9 @@ class Scene3D {
         }
         if (edgeRisk > 0) {
             const mix = Math.min(1, edgeRisk);
-            const base = new THREE.Color(view.palette.main);
-            const warn = new THREE.Color(0xff2244);
-            view.glow.material.color.copy(base).lerp(warn, mix);
+            // #9 预分配 Color，避免每帧 new THREE.Color
+            this._tmpColor.setHex(view.palette.main);
+            view.glow.material.color.copy(this._tmpColor).lerp(this._warnColor, mix);
             // 量子隐身时警告仍可见但压低
             const qScale = isQuantumVisual ? 0.35 : 1;
             view.glow.material.opacity = (0.28 + mix * 0.35 * (0.5 + 0.5 * Math.sin(t * 10))) * qScale;
@@ -2117,29 +2174,31 @@ class Scene3D {
             ? Math.min(0.55, baseOp + (hotOp - baseOp) * Math.min(1, maxRisk))
             : baseOp;
 
-        // 主边界环随风险偏红
-        if (this.boundaryGroup) {
-            const mainRing = this.boundaryGroup.getObjectByName('mainRing');
-            if (mainRing && mainRing.material && this._mainRingBaseColor) {
-                const mix = Math.min(1, maxRisk);
-                mainRing.material.emissive.copy(this._mainRingBaseColor)
-                    .lerp(this._mainRingHotColor, mix * 0.75);
-                if (mix > 0.3) {
-                    mainRing.material.emissiveIntensity = 0.85 + mix * 0.5 * pulse;
-                }
+        // 主边界环随风险偏红（#9 缓存引用，不再 getObjectByName）
+        if (this._mainRing && this._mainRing.material && this._mainRingBaseColor) {
+            const mix = Math.min(1, maxRisk);
+            this._mainRing.material.emissive.copy(this._mainRingBaseColor)
+                .lerp(this._mainRingHotColor, mix * 0.75);
+            if (mix > 0.3) {
+                this._mainRing.material.emissiveIntensity = 0.85 + mix * 0.5 * pulse;
             }
         }
     }
 
     _disposePlayerView(view) {
         if (!view) return;
-        this.playersGroup.remove(view.root);
+        if (this.playersGroup) this.playersGroup.remove(view.root);
+        // 标记共享资源：跳过 dispose，由 dispose() 统一释放
+        const shared = new Set(this._sharedRes);
         view.root.traverse(obj => {
-            if (obj.geometry) obj.geometry.dispose();
+            if (obj.geometry && !shared.has(obj.geometry)) obj.geometry.dispose();
             if (obj.material) {
-                if (obj.material.map) obj.material.map.dispose();
-                if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
-                else obj.material.dispose();
+                const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+                mats.forEach(m => {
+                    if (shared.has(m)) return;
+                    if (m.map && !shared.has(m.map)) m.map.dispose();
+                    m.dispose();
+                });
             }
         });
     }
@@ -2186,18 +2245,14 @@ class Scene3D {
             this.centerMark.scale.set(s, s, 1);
         }
 
-        // 双层能量弧反向旋转
-        if (this.energyArcGroup) {
-            const arcA = this.energyArcGroup.getObjectByName('arcA');
-            const arcB = this.energyArcGroup.getObjectByName('arcB');
-            if (arcA) arcA.rotation.y = t * 0.4;
-            if (arcB) arcB.rotation.y = -t * 0.25;
-        }
+        // 双层能量弧反向旋转（#9 缓存引用）
+        if (this._arcA) this._arcA.rotation.y = t * 0.4;
+        if (this._arcB) this._arcB.rotation.y = -t * 0.25;
 
-        // 边界脉冲点
+        // 边界脉冲点（复用 Matrix4，避免每帧 new）
         if (this.boundaryDots) {
             const R = SCENE3D.ARENA_RADIUS;
-            const m = new THREE.Matrix4();
+            const m = this._dotMat4;
             for (let i = 0; i < this._dotCount; i++) {
                 const a = (i / this._dotCount) * Math.PI * 2 + t * 0.3;
                 const pulse = 0.55 + 0.45 * Math.abs(Math.sin(t * 1.5 + i * 0.5));
@@ -2211,13 +2266,10 @@ class Scene3D {
             if (mat) mat.opacity = 0.55 + 0.25 * Math.sin(t * 2);
         }
 
-        // 主边界环呼吸发光（#7：有边缘风险时叠加偏红/增亮，写在同步之后避免被覆盖）
-        if (this.boundaryGroup) {
-            const mainRing = this.boundaryGroup.getObjectByName('mainRing');
-            if (mainRing && mainRing.material) {
-                mainRing.material.emissiveIntensity = 0.7 + 0.35 * Math.sin(t * 2);
-                mainRing.material.opacity = 0.75 + 0.15 * Math.sin(t * 2);
-            }
+        // 主边界环呼吸发光（#7：有边缘风险时叠加偏红/增亮）
+        if (this._mainRing && this._mainRing.material) {
+            this._mainRing.material.emissiveIntensity = 0.7 + 0.35 * Math.sin(t * 2);
+            this._mainRing.material.opacity = 0.75 + 0.15 * Math.sin(t * 2);
         }
         this._syncBoundaryDanger(gameState, t);
 
@@ -2230,21 +2282,87 @@ class Scene3D {
         this._unbindPointer();
         this.setAimVisual(null);
         this.setTargetHighlight(null);
+
+        // #9 拆除侧栏点击监听，避免重复 init 时叠 handler
+        this._panelHandlers.forEach(({ el, handler }) => {
+            if (el && handler) el.removeEventListener('click', handler);
+        });
+        this._panelHandlers = [];
+
         if (this._raf) cancelAnimationFrame(this._raf);
-        if (this.scene) {
-            this.scene.traverse((obj) => {
-                if (obj.geometry) obj.geometry.dispose();
-                if (obj.material) {
-                    if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
-                    else {
-                        if (obj.material.map) obj.material.map.dispose();
-                        obj.material.dispose();
-                    }
-                }
+
+        const shared = new Set(this._sharedRes);
+        const disposeObject = (obj) => {
+            if (!obj) return;
+            if (obj.geometry && !shared.has(obj.geometry)) obj.geometry.dispose();
+            if (obj.material) {
+                const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+                mats.forEach(m => {
+                    if (!m || shared.has(m)) return;
+                    if (m.map && !shared.has(m.map)) m.map.dispose();
+                    m.dispose();
+                });
+            }
+        };
+
+        // 先清视图（player/temp/proj），再扫场景剩余静态物
+        if (this._playerViews) {
+            this._playerViews.forEach(view => {
+                if (view.root && view.root.parent) view.root.parent.remove(view.root);
+                // 玩家体含共享热机点/桩：用 _disposePlayerView（跳过 shared）
+                this._disposePlayerView(view);
             });
+            this._playerViews.clear();
         }
+        if (this._tempFxViews) {
+            this._tempFxViews.forEach(view => {
+                if (view.root && view.root.parent) view.root.parent.remove(view.root);
+                view.root.traverse(disposeObject);
+            });
+            this._tempFxViews.clear();
+        }
+        if (this._projViews) {
+            this._projViews.forEach(view => {
+                if (view.root && view.root.parent) view.root.parent.remove(view.root);
+                view.root.traverse(disposeObject);
+            });
+            this._projViews.clear();
+        }
+        this._targetRings.forEach(r => {
+            if (r.parent) r.parent.remove(r);
+            disposeObject(r);
+        });
+        this._targetRings = [];
+        this._targetRingKey = null;
+        if (this._effectMeshes) {
+            this._effectMeshes.forEach(mesh => {
+                if (mesh.parent) mesh.parent.remove(mesh);
+                mesh.traverse(disposeObject);
+            });
+            this._effectMeshes = [];
+        }
+
+        if (this.scene) {
+            this.scene.traverse(disposeObject);
+        }
+
+        // 共享资源统一释放
+        this._sharedRes.forEach(res => {
+            if (res && res.dispose) res.dispose();
+        });
+        this._sharedRes = [];
+        this._targetRingGeo = null;
+        this._targetRingMat = null;
+        this._heatDotGeo = null;
+        this._heatDotMat = null;
+        this._stakeGeo = null;
+        this._stakeMat = null;
+
         if (this.renderer) {
             this.renderer.dispose();
+            try {
+                if (this.renderer.forceContextLoss) this.renderer.forceContextLoss();
+            } catch (e) { /* 部分浏览器/WebGL 实现可能抛错，忽略 */ }
             if (this.renderer.domElement && this.renderer.domElement.parentNode) {
                 this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
             }
@@ -2262,24 +2380,18 @@ class Scene3D {
         this.dangerMat = null;
         this.effectsGroup = null;
         this.centerMark = null;
-        if (this._playerViews) {
-            this._playerViews.forEach(view => this._disposePlayerView(view));
-            this._playerViews.clear();
-        }
         this.playersGroup = null;
-        if (this._tempFxViews) {
-            this._tempFxViews.forEach(view => this._disposeTempFxView(view));
-            this._tempFxViews.clear();
-        }
         this.tempFxGroup = null;
-        if (this._projViews) {
-            this._projViews.forEach(view => this._disposeTempFxView(view));
-            this._projViews.clear();
-        }
         this.projectilesGroup = null;
-        this._effectMeshes = [];
+        this._mainRing = null;
+        this._arcA = null;
+        this._arcB = null;
         this._effectKeys = '';
+        this._aimVisual = null;
         this.container = null;
+        this._raycaster = null;
+        this._groundPlane = null;
+        this._ndc = null;
         // #6 退出 3D 布局
         document.body.classList.remove('mode-3d');
         Scene3D._collapseSidePanels(false);
@@ -2310,12 +2422,14 @@ function ensureScene3D() {
             if (container3d) container3d.classList.add('hidden');
             return null;
         }
-        // 点击侧栏标题折叠/展开
+        // 点击侧栏标题折叠/展开（#9 记录 handler，dispose 时拆除）
         document.querySelectorAll('#main-game-area .side-panel h3').forEach(h3 => {
-            h3.addEventListener('click', () => {
+            const handler = () => {
                 const panel = h3.closest('.side-panel');
                 if (panel) panel.classList.toggle('collapsed');
-            });
+            };
+            h3.addEventListener('click', handler);
+            this._panelHandlers.push({ el: h3, handler });
         });
     }
     return window.Scene3DInstance;
