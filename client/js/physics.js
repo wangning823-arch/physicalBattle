@@ -46,6 +46,9 @@ class PhysicsEngine {
                     // 跳过发射者（保护期10帧）
                     if (projData.graceFrames <= 10) continue;
 
+                    // 量子叠加态：免疫炮弹动量转移，炮弹穿过
+                    if (player.isQuantum) continue;
+
                     // 非弹性碰撞：炮弹动量完全转移给玩家
                     const vel = projectile.velocity;
                     const momentum = projectile.mass * Math.sqrt(vel.x * vel.x + vel.y * vel.y);
@@ -397,7 +400,10 @@ class PhysicsEngine {
 
                 const p1Anchored = this.isPlayerAnchored(p1Id);
                 const p2Anchored = this.isPlayerAnchored(p2Id);
-                if (!p1Anchored && !p2Anchored) {
+                const p1Quantum = !!p1.isQuantum;
+                const p2Quantum = !!p2.isQuantum;
+                // 任一方处于量子叠加态时，软绳不施力（免疫位移类效果）
+                if (!p1Anchored && !p2Anchored && !p1Quantum && !p2Quantum) {
                     const dx = p2.position.x - p1.position.x;
                     const dy = p2.position.y - p1.position.y;
                     const currentDist = Math.sqrt(dx * dx + dy * dy);
@@ -421,8 +427,8 @@ class PhysicsEngine {
             }
             else if (effect.type === 'gravityField' || effect.type === 'repulsionField') {
                 this.players.forEach(player => {
-                    // 有定位锚的玩家不受力场影响
-                    if (this.isPlayerAnchored(player.playerId)) return;
+                    // 有定位锚或量子叠加态的玩家不受力场影响
+                    if (player.isQuantum || this.isPlayerAnchored(player.playerId)) return;
 
                     const dx = effect.x - player.position.x;
                     const dy = effect.y - player.position.y;
@@ -438,6 +444,7 @@ class PhysicsEngine {
                 });
             } else if (effect.type === 'frictionZone') {
                 this.players.forEach(player => {
+                    if (player.isQuantum) return;
                     const dx = effect.x - player.position.x;
                     const dy = effect.y - player.position.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -453,8 +460,8 @@ class PhysicsEngine {
             } else if (effect.type === 'dampingField') {
                 // 阻尼领域：以施法者为中心，范围内速度快速衰减
                 this.players.forEach(player => {
-                    // 有定位锚的玩家不受阻尼影响
-                    if (this.isPlayerAnchored(player.playerId)) return;
+                    // 有定位锚或量子叠加态的玩家不受阻尼影响
+                    if (player.isQuantum || this.isPlayerAnchored(player.playerId)) return;
 
                     const dx = effect.x - player.position.x;
                     const dy = effect.y - player.position.y;

@@ -641,8 +641,9 @@ class Game {
                 console.log('=== 使用量子叠加卡牌 ===');
                 console.log('当前 physics.effects:', this.physics.effects.map(e => ({ type: e.type, expiryRound: e.expiryRound })));
                 selfPlayer.quantumState = 'superposition';
-                // 添加特效
+                // 同步到物理体，使力场/炮弹等也能识别叠加态
                 if (selfPhysics) {
+                    selfPhysics.isQuantum = true;
                     this.physics.addTempEffect({
                         type: 'quantum',
                         x: selfPhysics.position.x,
@@ -961,6 +962,9 @@ class Game {
             });
         }
         player.quantumState = null; // 恢复正常
+        if (physics) {
+            physics.isQuantum = false;
+        }
     }
 
     // 动量守恒反冲：施加反方向等大小冲量
