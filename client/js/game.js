@@ -1064,28 +1064,29 @@ class Game {
 
         if (!selfPhysics || !targetPhysics) return false;
 
-        // 检查目标是否有定位锚效果
+        // 目标处于定位锚时发射无效：不消耗热机，允许改瞄或取消
         const hasAnchor = targetPlayer && targetPlayer.effects.some(e => e.type === 'anchor');
-
-        // 释放充能点数倍的动量冲击（只对无定位锚的目标）
-        if (!hasAnchor) {
-            const impulse = 200 * heatEngine.charge;
-            const impulseX = dirX * impulse;
-            const impulseY = dirY * impulse;
-            this.physics.applyImpulse(targetId, impulseX, impulseY);
-            this.applyRecoil(player.id, impulseX, impulseY);
-
-            // 添加热机爆发特效
-            this.physics.addTempEffect({
-                type: 'heat_engine_blast',
-                x: targetPhysics.position.x,
-                y: targetPhysics.position.y,
-                life: 1500,
-                maxLife: 1500,
-                _seed: Date.now() + 9999,
-                _startTime: Date.now()
-            });
+        if (hasAnchor) {
+            return false;
         }
+
+        // 释放充能点数倍的动量冲击
+        const impulse = 200 * heatEngine.charge;
+        const impulseX = dirX * impulse;
+        const impulseY = dirY * impulse;
+        this.physics.applyImpulse(targetId, impulseX, impulseY);
+        this.applyRecoil(player.id, impulseX, impulseY);
+
+        // 添加热机爆发特效
+        this.physics.addTempEffect({
+            type: 'heat_engine_blast',
+            x: targetPhysics.position.x,
+            y: targetPhysics.position.y,
+            life: 1500,
+            maxLife: 1500,
+            _seed: Date.now() + 9999,
+            _startTime: Date.now()
+        });
 
         // 发射后移除热机
         player.heatEngine = null;
