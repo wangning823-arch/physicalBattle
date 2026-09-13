@@ -29,13 +29,16 @@ class Game {
     initGame(mode = 'pvp', difficulty = 'normal') {
         this.gameMode = mode;
         this.playerCount = mode === '3pvp' ? 3 : 2;
+        this.aiDifficulty = difficulty || 'normal';
 
         if (mode === 'pve') {
-            this.aiPlayer = new AIPlayer(this, difficulty);
+            this.aiPlayer = new AIPlayer(this, this.aiDifficulty);
         } else {
             this.aiPlayer = null;
         }
 
+        // 新局必须重建牌库：否则上局弃牌堆/未归还手牌会污染本局抽牌
+        this.cardSystem = new CardSystem();
         this.physics.reset();
         if (this.playerCount === 3) {
             const r = 140;
@@ -127,6 +130,11 @@ class Game {
 
         // 电磁炮：无电荷时不能使用
         if (card.id === 'electromagnetic_cannon' && (!player.charge || player.charge === 0)) {
+            return false;
+        }
+
+        // 瞄准期间能量可能被其它流程改写；确认时再校验，避免能量被扣成负数
+        if (player.energy < card.cost) {
             return false;
         }
 
@@ -1522,15 +1530,19 @@ class Game {
         this.currentTurn = 1;
         this.currentPlayerIndex = 0;
         this.turnPhase = 'discard';
+        this.lastPlayedCard = null;
         this.discardState = { active: false, playerIndex: 0, requiredDiscards: 0, selectedIndices: [] };
         this.aimingState = { active: false, card: null, cardIndex: -1, playerId: 0 };
         this.targetingState = { active: false, card: null, cardIndex: -1, playerId: 0 };
+        this.heatEngineAiming = { active: false, playerId: 0 };
         this.state = GAME_STATES.PLAYING;
         this.isNewRound = false;
         this.gameMode = savedMode;
         this.playerCount = savedPlayerCount;
+        // 与 initGame 一致：重建牌库并保留原 AI 难度
+        this.cardSystem = new CardSystem();
         if (savedMode === 'pve') {
-            this.aiPlayer = new AIPlayer(this);
+            this.aiPlayer = new AIPlayer(this, this.aiDifficulty || 'normal');
         } else {
             this.aiPlayer = null;
         }
