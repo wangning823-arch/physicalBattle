@@ -107,8 +107,9 @@ class Game {
 
         player.energy -= card.cost;
         this.lastPlayedCard = card;
-        this.executeCard(card, playerId, null, null);
+        // 先移出手牌再执行：避免熵增等改写 hand 时误伤，且与 discard 生命周期一致
         player.cards.splice(cardIndex, 1);
+        this.executeCard(card, playerId, null, null);
 
         if (card.id === 'quantum_superposition') {
             this.advanceGamePhase();
@@ -147,8 +148,8 @@ class Game {
         
         player.energy -= card.cost;
         this.lastPlayedCard = card;
-        this.executeCard(card, playerId, { x: targetX, y: targetY });
         player.cards.splice(cardIndex, 1);
+        this.executeCard(card, playerId, { x: targetX, y: targetY });
         
         this.aimingState = { active: false, card: null, cardIndex: -1, playerId: 0 };
         return true;
@@ -169,8 +170,8 @@ class Game {
 
         player.energy -= card.cost;
         this.lastPlayedCard = card;
-        this.executeCard(card, playerId, null, targetPlayerId);
         player.cards.splice(cardIndex, 1);
+        this.executeCard(card, playerId, null, targetPlayerId);
 
         this.targetingState = { active: false, card: null, cardIndex: -1, playerId: 0 };
         return true;
@@ -201,9 +202,14 @@ class Game {
             selfPlayer.heatEngine.charge = Math.min(selfPlayer.heatEngine.maxCharge, selfPlayer.heatEngine.charge + 1);
         }
         
-        // 如果目标处于量子叠加态，卡牌无效
-        if (targetPlayer && targetPlayer.quantumState !== null &&
-            (card.effect.targetEnemy || ['charge_attach', 'charge_attach_negative'].includes(card.id))) {
+        // 如果目标处于量子叠加态，需要指定目标的卡牌无效（仍消耗能量并进入弃牌堆）
+        // 技能弹类（冲量冲击/爆裂冲击/电磁炮/高能辐射）不受此限制：switch 内已按叠加态跳过命中
+        const needsSpecificTargetAgainstQuantum =
+            card.effect.targetEnemy &&
+            !['momentum_blast', 'explosive_charge', 'electromagnetic_cannon', 'high_energy_radiation'].includes(card.id);
+        if (targetPlayer && targetPlayer.quantumState !== null && needsSpecificTargetAgainstQuantum) {
+            this.cardSystem.discard(card);
+            this.checkGameOver();
             return;
         }
 
