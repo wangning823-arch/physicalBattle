@@ -69,6 +69,7 @@ class AIPlayer {
         await this.delay(this.thinkingDelay);
 
         let cardsPlayed = 0;
+        let turnAlreadyEnded = false;
 
         while (cardsPlayed < this.difficulty.maxCardsPerTurn) {
             const player = this.game.players.find(p => p.id === playerId);
@@ -88,17 +89,31 @@ class AIPlayer {
 
             if (decision.needsAim) {
                 const target = this.chooseAimTarget(decision.card, playerId);
-                if (target) {
-                    this.game.playCard(playerId, decision.cardIndex);
-                    this.game.confirmAim(target.x, target.y);
-                    cardsPlayed++;
-                    await this.delay(this.cardPlayDelay);
-                } else {
+                if (!target) {
+                    this.game.cancelAim();
                     break;
                 }
+                const playResult = this.game.playCard(playerId, decision.cardIndex);
+                if (playResult === 'end_turn') {
+                    turnAlreadyEnded = true;
+                    break;
+                }
+                if (playResult !== 'aiming' && playResult !== true) {
+                    this.game.cancelAim();
+                    break;
+                }
+                const aimOk = this.game.confirmAim(target.x, target.y);
+                if (!aimOk) {
+                    // 瞄准失败（出界/无电荷等）：清掉残留瞄准态，避免泄漏到下一回合
+                    this.game.cancelAim();
+                    break;
+                }
+                cardsPlayed++;
+                await this.delay(this.cardPlayDelay);
             } else {
                 const result = this.game.playCard(playerId, decision.cardIndex);
                 if (result === 'end_turn') {
+                    turnAlreadyEnded = true;
                     break;
                 }
                 cardsPlayed++;
@@ -108,7 +123,10 @@ class AIPlayer {
 
         this.isThinking = false;
 
-        this.game.advanceGamePhase();
+        // quantum_superposition 等卡牌已在 playCard 内推进回合，不可二次 advance
+        if (!turnAlreadyEnded) {
+            this.game.advanceGamePhase();
+        }
         if (this.game.isNewRound) {
             this.game.drawCardsForAllPlayers();
         }
