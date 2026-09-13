@@ -197,16 +197,6 @@ class AIPlayer {
             case 'brownian_motion':
                 score = isNearEdge ? 60 : 35;
                 break;
-            case 'random_leap':
-                // 临边时价值高（可逃出生天），平时作为资源补充
-                if (isNearEdge) {
-                    score = 90;
-                } else if (player.energy < 2) {
-                    score = 55;
-                } else {
-                    score = 30;
-                }
-                break;
             case 'anchor':
                 score = isNearEdge ? 85 : 20;
                 break;
