@@ -56,79 +56,92 @@ class AIPlayer {
 
     async playTurn(playerId) {
         if (this.isThinking) return;
+        if (this.game.state === GAME_STATES.GAME_OVER) return;
         this.isThinking = true;
 
-        // 困难模式：额外能量
-        if (this.difficulty.energyBonus > 0) {
-            const player = this.game.players.find(p => p.id === playerId);
-            if (player) {
-                player.energy = Math.min(player.energy + this.difficulty.energyBonus, GAME_CONFIG.MAX_ENERGY);
-            }
-        }
-
-        await this.delay(this.thinkingDelay);
-
-        let cardsPlayed = 0;
-        let turnAlreadyEnded = false;
-
-        while (cardsPlayed < this.difficulty.maxCardsPerTurn) {
-            const player = this.game.players.find(p => p.id === playerId);
-            if (!player || player.eliminated) break;
-
-            const decision = this.chooseCard(playerId);
-            if (!decision) break;
-
-            if (decision.needDiscard) {
-                if (this.onDiscardStart) this.onDiscardStart();
-                this.autoDiscard(playerId);
-                await this.delay(300);
-                continue;
-            }
-
-            if (this.onCardPlayed) this.onCardPlayed(decision.card);
-
-            if (decision.needsAim) {
-                const target = this.chooseAimTarget(decision.card, playerId);
-                if (!target) {
-                    this.game.cancelAim();
-                    break;
+        try {
+            // 困难模式：额外能量
+            if (this.difficulty.energyBonus > 0) {
+                const player = this.game.players.find(p => p.id === playerId);
+                if (player && !player.eliminated) {
+                    player.energy = Math.min(player.energy + this.difficulty.energyBonus, GAME_CONFIG.MAX_ENERGY);
                 }
-                const playResult = this.game.playCard(playerId, decision.cardIndex);
-                if (playResult === 'end_turn') {
+            }
+
+            await this.delay(this.thinkingDelay);
+            if (this.game.state === GAME_STATES.GAME_OVER) return;
+
+            let cardsPlayed = 0;
+            let turnAlreadyEnded = false;
+
+            while (cardsPlayed < this.difficulty.maxCardsPerTurn) {
+                if (this.game.state === GAME_STATES.GAME_OVER) {
                     turnAlreadyEnded = true;
                     break;
                 }
-                if (playResult !== 'aiming' && playResult !== true) {
-                    this.game.cancelAim();
-                    break;
+                const player = this.game.players.find(p => p.id === playerId);
+                if (!player || player.eliminated) break;
+
+                const decision = this.chooseCard(playerId);
+                if (!decision) break;
+
+                if (decision.needDiscard) {
+                    if (this.onDiscardStart) this.onDiscardStart();
+                    this.autoDiscard(playerId);
+                    await this.delay(300);
+                    continue;
                 }
-                const aimOk = this.game.confirmAim(target.x, target.y);
-                if (!aimOk) {
-                    // 瞄准失败（出界/无电荷等）：清掉残留瞄准态，避免泄漏到下一回合
-                    this.game.cancelAim();
-                    break;
+
+                if (this.onCardPlayed) this.onCardPlayed(decision.card);
+
+                if (decision.needsAim) {
+                    const target = this.chooseAimTarget(decision.card, playerId);
+                    if (!target) {
+                        this.game.cancelAim();
+                        break;
+                    }
+                    const playResult = this.game.playCard(playerId, decision.cardIndex);
+                    if (playResult === 'end_turn') {
+                        turnAlreadyEnded = true;
+                        break;
+                    }
+                    if (playResult !== 'aiming' && playResult !== true) {
+                        this.game.cancelAim();
+                        break;
+                    }
+                    const aimOk = this.game.confirmAim(target.x, target.y);
+                    if (!aimOk) {
+                        // 瞄准失败（出界/无电荷等）：清掉残留瞄准态，避免泄漏到下一回合
+                        this.game.cancelAim();
+                        break;
+                    }
+                    cardsPlayed++;
+                    await this.delay(this.cardPlayDelay);
+                } else {
+                    const result = this.game.playCard(playerId, decision.cardIndex);
+                    if (result === 'end_turn') {
+                        turnAlreadyEnded = true;
+                        break;
+                    }
+                    cardsPlayed++;
+                    await this.delay(this.cardPlayDelay);
                 }
-                cardsPlayed++;
-                await this.delay(this.cardPlayDelay);
-            } else {
-                const result = this.game.playCard(playerId, decision.cardIndex);
-                if (result === 'end_turn') {
-                    turnAlreadyEnded = true;
-                    break;
-                }
-                cardsPlayed++;
-                await this.delay(this.cardPlayDelay);
             }
-        }
 
-        this.isThinking = false;
-
-        // quantum_superposition 等卡牌已在 playCard 内推进回合，不可二次 advance
-        if (!turnAlreadyEnded) {
-            this.game.advanceGamePhase();
-        }
-        if (this.game.isNewRound) {
-            this.game.drawCardsForAllPlayers();
+            // quantum_superposition 等卡牌已在 playCard 内推进回合，不可二次 advance；
+            // 对局已结束时也不再推进阶段，避免 GAME_OVER 后仍轮转
+            if (!turnAlreadyEnded && this.game.state !== GAME_STATES.GAME_OVER) {
+                this.game.advanceGamePhase();
+            }
+            if (this.game.isNewRound) {
+                this.game.drawCardsForAllPlayers();
+            }
+        } finally {
+            this.isThinking = false;
+            // 异常路径也不能泄漏瞄准/思考锁
+            if (this.game.aimingState && this.game.aimingState.playerId === playerId) {
+                this.game.cancelAim();
+            }
         }
     }
 
@@ -153,11 +166,15 @@ class AIPlayer {
 
         if (playableCards.length === 0) return null;
 
-        const scored = playableCards.map(({ card, index }) => ({
-            card,
-            cardIndex: index,
-            score: this.scoreCard(card, playerId)
-        }));
+        const scored = playableCards
+            .filter(({ card }) => card && card.effect)
+            .map(({ card, index }) => ({
+                card,
+                cardIndex: index,
+                score: this.scoreCard(card, playerId)
+            }));
+
+        if (scored.length === 0) return null;
 
         scored.sort((a, b) => b.score - a.score);
 
@@ -173,6 +190,7 @@ class AIPlayer {
     }
 
     scoreCard(card, playerId) {
+        if (!card || !card.effect) return -999;
         const player = this.game.players.find(p => p.id === playerId);
         const targetId = playerId === 1 ? 2 : 1;
         const targetPlayer = this.game.players.find(p => p.id === targetId);

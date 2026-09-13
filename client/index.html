@@ -533,7 +533,13 @@
         </p>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <!-- Matter.js：优先本地 vendor，失败时 CDN 兜底（与 Three 同策略，利于离线/弱网） -->
+    <script src="vendor/matter.min.js?v=0.19.0"></script>
+    <script>
+        if (typeof Matter === 'undefined') {
+            document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"><\/script>');
+        }
+    </script>
     <!-- Three.js：优先本地 vendor，加载失败时 CDN 兜底（无构建静态链路） -->
     <script src="vendor/three.min.js?v=r128"></script>
     <script>
@@ -541,13 +547,13 @@
             document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
         }
     </script>
-    <script src="js/constants.js?v=20260716c"></script>
-    <script src="js/physics.js?v=20260716c"></script>
-    <script src="js/cardSystem.js?v=20260716c"></script>
-    <script src="js/renderer.js?v=20260716c"></script>
-    <script src="js/scene3d.js?v=20260716c"></script>
-    <script src="js/aiPlayer.js?v=20260716c"></script>
-    <script src="js/game.js?v=20260716c"></script>
-    <script src="js/main.js?v=20260716c"></script>
+    <script src="js/constants.js?v=20260716d"></script>
+    <script src="js/physics.js?v=20260716d"></script>
+    <script src="js/cardSystem.js?v=20260716d"></script>
+    <script src="js/renderer.js?v=20260716d"></script>
+    <script src="js/scene3d.js?v=20260716d"></script>
+    <script src="js/aiPlayer.js?v=20260716d"></script>
+    <script src="js/game.js?v=20260716d"></script>
+    <script src="js/main.js?v=20260716d"></script>
 </body>
 </html>

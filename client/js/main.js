@@ -466,6 +466,8 @@ const GameUI = {
     // 处理当前阶段
     handleCurrentPhase() {
         if (!this.gameStarted) return;
+        // 对局结束（或已不在 PLAYING）后禁止再进入弃牌/AI 流程
+        if (this.game.state === GAME_STATES.GAME_OVER) return;
 
         this.viewingTab = this.game.currentPlayerIndex;
 
@@ -490,6 +492,7 @@ const GameUI = {
 
     async triggerAITurn() {
         if (!this.game.aiPlayer || this.game.aiPlayer.isThinking) return;
+        if (this.game.state === GAME_STATES.GAME_OVER) return;
 
         const aiPlayer = this.game.aiPlayer;
 
@@ -503,18 +506,26 @@ const GameUI = {
 
         this.updateUI();
 
-        await aiPlayer.playTurn(this.game.players[1].id);
+        try {
+            await aiPlayer.playTurn(this.game.players[1].id);
+        } finally {
+            // 清除回调（即使出牌中抛错也不泄漏）
+            aiPlayer.onCardPlayed = null;
+            aiPlayer.onDiscardStart = null;
+            this.clearAICardNotification();
+        }
 
-        // 清除回调
-        aiPlayer.onCardPlayed = null;
-        aiPlayer.onDiscardStart = null;
+        // AI 出牌可能直接打出胜负（淘汰/出界）
+        if (this.game.state === GAME_STATES.GAME_OVER) {
+            this.updateUI();
+            return;
+        }
 
         if (this.game.isNewRound) {
             this.game.drawCardsForAllPlayers();
         }
 
         this.updateUI();
-        this.clearAICardNotification();
         this.handleCurrentPhase();
     },
 
