@@ -1,5 +1,5 @@
 // ============ Scene3D — Three.js 场景骨架 ============
-// 职责：场景 / 相机 / 灯光 / 渲染器生命周期；#2 竞技场与地面 3D 化。
+// 职责：场景 / 相机 / 灯光 / 渲染器生命周期；#2 竞技场与地面 3D 化；#3 玩家体 3D。
 // 与 2D Renderer 共存：默认不启用；?render=3d 时挂到 #three-container。
 
 const SCENE3D = {
@@ -10,6 +10,15 @@ const SCENE3D = {
     LOOK_AT: { x: 0, y: 0, z: 0 },
     DEBUG_AXES: false
 };
+
+// 玩家配色（对齐 renderer.drawPlayer 的 playerColors）
+const PLAYER3D_COLORS = {
+    1: { main: 0xff6b35, emissive: 0x8a2a10, css: '#FF6B35' },
+    2: { main: 0x1e90ff, emissive: 0x0a3a80, css: '#1E90FF' },
+    3: { main: 0x22c55e, emissive: 0x0d5c2e, css: '#22c55e' }
+};
+
+const PLAYER3D_BODY_RADIUS = 18; // ≈ PLAYER_CONFIG.WIDTH/2 - 2
 
 // 场地特效类型 → 3D 地面标记样式
 const ARENA3D_EFFECT_STYLE = {
@@ -66,6 +75,8 @@ class Scene3D {
         this.energyArcGroup = null;
         this.boundaryDots = null;
         this.effectsGroup = null;
+        this.playersGroup = null;
+        this._playerViews = new Map(); // playerId -> view
         this._effectMeshes = [];
         this._effectKeys = '';
         this._raf = 0;
@@ -129,7 +140,7 @@ class Scene3D {
         this.clock = new THREE.Clock();
         window.addEventListener('resize', this._onResize);
         this.ready = true;
-        console.log('[Scene3D] 竞技场 3D 化完成');
+        console.log('[Scene3D] 竞技场与玩家体 3D 就绪（#3）');
         return true;
     }
 
@@ -167,6 +178,10 @@ class Scene3D {
         this.effectsGroup = new THREE.Group();
         this.effectsGroup.name = 'arenaEffects';
         this.arenaGroup.add(this.effectsGroup);
+
+        this.playersGroup = new THREE.Group();
+        this.playersGroup.name = 'players';
+        this.scene.add(this.playersGroup);
 
         this.scene.add(this.arenaGroup);
     }
@@ -530,6 +545,383 @@ class Scene3D {
         });
     }
 
+    // ---------- 玩家体 3D（#3：与 physics / 玩家逻辑状态同步）----------
+
+    _ensurePlayerView(playerId) {
+        if (this._playerViews.has(playerId)) return this._playerViews.get(playerId);
+        const palette = PLAYER3D_COLORS[playerId] || PLAYER3D_COLORS[1];
+        const view = this._createPlayerView(playerId, palette);
+        this._playerViews.set(playerId, view);
+        this.playersGroup.add(view.root);
+        return view;
+    }
+
+    _createPlayerView(playerId, palette) {
+        const root = new THREE.Group();
+        root.name = `player_${playerId}`;
+        const R = PLAYER3D_BODY_RADIUS;
+
+        // 主体：金属感多面体 + 发光核心
+        const bodyMat = new THREE.MeshStandardMaterial({
+            color: palette.main,
+            emissive: palette.emissive,
+            emissiveIntensity: 0.35,
+            metalness: 0.55,
+            roughness: 0.35,
+            transparent: true,
+            opacity: 1
+        });
+        const body = new THREE.Mesh(new THREE.IcosahedronGeometry(R, 1), bodyMat);
+        body.position.y = R + 2;
+        body.castShadow = false;
+        body.name = 'body';
+        root.add(body);
+
+        // 内核发光球
+        const coreMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.35
+        });
+        const core = new THREE.Mesh(new THREE.SphereGeometry(R * 0.35, 12, 12), coreMat);
+        core.position.y = body.position.y;
+        core.name = 'core';
+        root.add(core);
+
+        // 底部接触光晕
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: palette.main,
+            transparent: true,
+            opacity: 0.28,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        });
+        const glow = new THREE.Mesh(new THREE.CircleGeometry(R + 8, 24), glowMat);
+        glow.rotation.x = -Math.PI / 2;
+        glow.position.y = 0.4;
+        glow.name = 'glow';
+        root.add(glow);
+
+        // 护盾气泡（默认隐藏）
+        const shieldMat = new THREE.MeshStandardMaterial({
+            color: 0xffd700,
+            emissive: 0x8a7000,
+            emissiveIntensity: 0.8,
+            transparent: true,
+            opacity: 0.18,
+            metalness: 0.1,
+            roughness: 0.2,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+        const shield = new THREE.Mesh(new THREE.SphereGeometry(R + 14, 20, 16), shieldMat);
+        shield.position.y = body.position.y;
+        shield.name = 'shield';
+        shield.visible = false;
+        root.add(shield);
+
+        // 定位锚地面环 + 四桩（默认隐藏）
+        const anchorGroup = new THREE.Group();
+        anchorGroup.name = 'anchor';
+        anchorGroup.position.y = 0.6;
+        anchorGroup.visible = false;
+        const chainMat = new THREE.MeshBasicMaterial({
+            color: 0xcd853f,
+            transparent: true,
+            opacity: 0.85,
+            side: THREE.DoubleSide
+        });
+        const anchorRing = new THREE.Mesh(new THREE.RingGeometry(R + 8, R + 12, 28), chainMat);
+        anchorRing.rotation.x = -Math.PI / 2;
+        anchorGroup.add(anchorRing);
+        for (let i = 0; i < 4; i++) {
+            const a = (i / 4) * Math.PI * 2;
+            const stake = new THREE.Mesh(
+                new THREE.BoxGeometry(4, 3, 10),
+                new THREE.MeshStandardMaterial({
+                    color: 0xcd853f,
+                    metalness: 0.4,
+                    roughness: 0.6
+                })
+            );
+            stake.position.set(Math.cos(a) * (R + 16), 1.5, Math.sin(a) * (R + 16));
+            stake.rotation.y = -a;
+            anchorGroup.add(stake);
+        }
+        root.add(anchorGroup);
+
+        // 电荷环（默认隐藏）
+        const chargeMat = new THREE.MeshBasicMaterial({
+            color: 0xffff00,
+            transparent: true,
+            opacity: 0.75,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+        const chargeRing = new THREE.Mesh(new THREE.TorusGeometry(R + 6, 1.5, 8, 32), chargeMat);
+        chargeRing.rotation.x = Math.PI / 2;
+        chargeRing.position.y = body.position.y;
+        chargeRing.name = 'chargeRing';
+        chargeRing.visible = false;
+        root.add(chargeRing);
+
+        // 热机充能粒子（占位：沿轨道的小球，#5 再细化）
+        const heatGroup = new THREE.Group();
+        heatGroup.name = 'heat';
+        heatGroup.position.y = body.position.y + R + 10;
+        heatGroup.visible = false;
+        const heatDots = [];
+        for (let i = 0; i < 5; i++) {
+            const mat = new THREE.MeshBasicMaterial({
+                color: 0xff6600,
+                transparent: true,
+                opacity: 0.9
+            });
+            const d = new THREE.Mesh(new THREE.SphereGeometry(2.2, 8, 8), mat);
+            heatGroup.add(d);
+            heatDots.push(d);
+        }
+        root.add(heatGroup);
+
+        // P 标签 Sprite
+        const label = this._makePlayerLabel(palette.css, `P${playerId}`);
+        label.position.y = body.position.y + R + 28;
+        label.name = 'label';
+        root.add(label);
+
+        // 质量变化外环（虚线风格用细环近似）
+        const massRingMat = new THREE.MeshBasicMaterial({
+            color: 0xff6666,
+            transparent: true,
+            opacity: 0.55,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+        const massRing = new THREE.Mesh(new THREE.TorusGeometry(R + 10, 1, 6, 24), massRingMat);
+        massRing.rotation.x = Math.PI / 2;
+        massRing.position.y = 0.8;
+        massRing.name = 'massRing';
+        massRing.visible = false;
+        root.add(massRing);
+
+        return {
+            playerId,
+            root,
+            body,
+            core,
+            glow,
+            shield,
+            anchorGroup,
+            chargeRing,
+            heatGroup,
+            heatDots,
+            massRing,
+            label,
+            palette,
+            lastPos: null
+        };
+    }
+
+    _makePlayerLabel(cssColor, text) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, 128, 64);
+        ctx.font = 'bold 36px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.beginPath();
+        ctx.ellipse(64, 36, 28, 18, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = cssColor;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.strokeText(text, 64, 32);
+        ctx.fillText(text, 64, 32);
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.needsUpdate = true;
+        const mat = new THREE.SpriteMaterial({
+            map: tex,
+            transparent: true,
+            depthTest: false
+        });
+        const sprite = new THREE.Sprite(mat);
+        sprite.scale.set(36, 18, 1);
+        return sprite;
+    }
+
+    /**
+     * 与游戏状态同步玩家 3D 体。
+     * @param {Object} gameState main.js 传入的 getState() 快照
+     *  - physicsPlayers: [{playerId, position:{x,y}, velocity, mass}]
+     *  - players: 逻辑玩家（eliminated / quantumState / effects / heatEngine / charge / shieldActive）
+     *  - shields: {id:bool}
+     */
+    syncPlayers(gameState) {
+        if (!this.ready || !this.playersGroup) return;
+        const phys = Array.isArray(gameState.physicsPlayers) ? gameState.physicsPlayers : [];
+        const logic = Array.isArray(gameState.players) ? gameState.players : [];
+        const shields = gameState.shields || {};
+
+        const aliveIds = new Set();
+        phys.forEach(p => {
+            if (!p || typeof p.playerId !== 'number') return;
+            const pd = logic.find(gp => gp.id === p.playerId);
+            if (pd && pd.eliminated) return;
+            aliveIds.add(p.playerId);
+        });
+        // 逻辑在场但物理尚未建体时也保证 mesh 存在（开局同步间隙）
+        logic.forEach(gp => {
+            if (gp && !gp.eliminated) aliveIds.add(gp.id);
+        });
+
+        // 移除已消失的玩家
+        this._playerViews.forEach((view, id) => {
+            if (!aliveIds.has(id)) {
+                this._disposePlayerView(view);
+                this._playerViews.delete(id);
+            }
+        });
+
+        // 确保视图存在并应用状态
+        aliveIds.forEach(id => {
+            const view = this._ensurePlayerView(id);
+            const pp = phys.find(p => p.playerId === id);
+            const pd = logic.find(gp => gp.id === id);
+            this._applyPlayerState(view, pp, pd, shields[id]);
+        });
+    }
+
+    _applyPlayerState(view, pp, pd, hasShield) {
+        const t = this.clock ? this.clock.getElapsedTime() : (Date.now() / 1000);
+        const invisible = !!(pd && pd.quantumState);
+        const isQuantumVisual = invisible; // 与 2D 量子隐身一致
+
+        // 位置：2D (x,y) → 3D (x, R+2, -y)
+        let x = 0, z = 0, vx = 0, vy = 0, mass = PLAYER_CONFIG ? PLAYER_CONFIG.MASS : 70;
+        if (pp && pp.position) {
+            x = pp.position.x;
+            z = -pp.position.y;
+            vx = pp.velocity ? pp.velocity.x : 0;
+            vy = pp.velocity ? pp.velocity.y : 0;
+            mass = pp.mass || mass;
+        }
+        view.root.position.x = x;
+        view.root.position.z = z;
+
+        // 朝速度方向轻微倾斜（视觉反馈，不影响物理）
+        const speed = Math.sqrt(vx * vx + vy * vy);
+        if (speed > 0.2) {
+            const lean = Math.min(0.45, speed * 0.04);
+            // 2D 速度 → 3D：vy 屏幕向下 = 世界 -z
+            view.body.rotation.x = lean * (vy / speed) * -1;
+            view.body.rotation.z = lean * (vx / speed);
+        } else {
+            view.body.rotation.x *= 0.85;
+            view.body.rotation.z *= 0.85;
+        }
+        view.body.rotation.y += 0.01 + Math.min(0.05, speed * 0.002);
+
+        // 质量缩放（相对默认 MASS）
+        const baseMass = (typeof PLAYER_CONFIG !== 'undefined' && PLAYER_CONFIG.MASS) || 70;
+        const mScale = Math.max(0.55, Math.min(1.6, mass / baseMass));
+        view.body.scale.set(mScale, mScale, mScale);
+        const bodyY = PLAYER3D_BODY_RADIUS * mScale + 2;
+        view.body.position.y = bodyY;
+        view.core.position.y = bodyY;
+        view.shield.position.y = bodyY;
+        view.chargeRing.position.y = bodyY;
+        view.heatGroup.position.y = bodyY + PLAYER3D_BODY_RADIUS * mScale + 10;
+        view.label.position.y = bodyY + PLAYER3D_BODY_RADIUS * mScale + 28;
+
+        // 量子隐身 / 半透明
+        if (isQuantumVisual) {
+            view.root.visible = true;
+            view.body.material.opacity = 0.15 + 0.05 * Math.sin(t * 4);
+            view.body.material.transparent = true;
+            view.core.material.opacity = 0.08;
+            view.glow.material.opacity = 0.05;
+            view.label.material.opacity = 0.2;
+        } else {
+            view.body.material.opacity = 1;
+            view.core.material.opacity = 0.35;
+            view.glow.material.opacity = 0.28;
+            view.label.material.opacity = 1;
+        }
+
+        // 护盾
+        const shieldOn = !!(hasShield || (pd && pd.shieldActive));
+        view.shield.visible = shieldOn && !isQuantumVisual;
+        if (view.shield.visible) {
+            const pulse = 1 + Math.sin(t * 3) * 0.04;
+            view.shield.scale.set(pulse, pulse, pulse);
+            view.shield.material.opacity = 0.14 + 0.06 * Math.sin(t * 5);
+        }
+
+        // 定位锚
+        const anchored = !!(pd && pd.effects && pd.effects.some(e => e.type === 'anchor'));
+        view.anchorGroup.visible = anchored;
+        if (anchored) {
+            view.anchorGroup.rotation.y = t * 0.6;
+        }
+
+        // 电荷
+        const charge = pd ? (pd.charge || 0) : 0;
+        view.chargeRing.visible = charge !== 0 && !isQuantumVisual;
+        if (view.chargeRing.visible) {
+            const isPos = charge > 0;
+            view.chargeRing.material.color.setHex(isPos ? 0xffff00 : 0x00bfff);
+            const r = PLAYER3D_BODY_RADIUS + 6 + Math.abs(charge) * 2;
+            if (view._chargeRadius !== r) {
+                view._chargeRadius = r;
+                view.chargeRing.geometry.dispose();
+                view.chargeRing.geometry = new THREE.TorusGeometry(r, 1.4, 8, 32);
+            }
+            view.chargeRing.rotation.z = t * 2;
+            view.chargeRing.material.opacity = 0.55 + 0.25 * Math.sin(t * 4);
+        }
+
+        // 质量指示环
+        const massEffect = pd && pd.effects ? pd.effects.find(e => e.type === 'massChange') : null;
+        view.massRing.visible = !!massEffect;
+        if (massEffect) {
+            const heavy = massEffect.multiplier > 1;
+            view.massRing.material.color.setHex(heavy ? 0xff6666 : 0x66ff66);
+            view.massRing.rotation.z = -t * 1.2;
+        }
+
+        // 热机（占位：充能点沿轨道）
+        const he = pd && pd.heatEngine && pd.heatEngine.active ? pd.heatEngine : null;
+        view.heatGroup.visible = !!he;
+        if (he) {
+            const maxC = Math.max(1, he.maxCharge || 1);
+            view.heatDots.forEach((dot, i) => {
+                dot.visible = i < (he.charge || 0);
+                const a = (i / maxC) * Math.PI * 2 + t * 2;
+                const rr = 12 + (he.charge >= maxC ? 2 : 0);
+                dot.position.set(Math.cos(a) * rr, Math.sin(t * 3 + i) * 2, Math.sin(a) * rr);
+            });
+        }
+
+        // 接触光晕呼吸
+        view.glow.scale.setScalar(1 + Math.sin(t * 2) * 0.05);
+    }
+
+    _disposePlayerView(view) {
+        if (!view) return;
+        this.playersGroup.remove(view.root);
+        view.root.traverse(obj => {
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) {
+                if (obj.material.map) obj.material.map.dispose();
+                if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                else obj.material.dispose();
+            }
+        });
+    }
+
     // ---------- 帧更新 ----------
 
     handleResize() {
@@ -550,6 +942,7 @@ class Scene3D {
 
         if (gameState) {
             this.syncArenaEffects(gameState.effects);
+            this.syncPlayers(gameState);
         }
 
         // 中心环呼吸
@@ -628,6 +1021,11 @@ class Scene3D {
         this.boundaryDots = null;
         this.effectsGroup = null;
         this.centerMark = null;
+        if (this._playerViews) {
+            this._playerViews.forEach(view => this._disposePlayerView(view));
+            this._playerViews.clear();
+        }
+        this.playersGroup = null;
         this._effectMeshes = [];
         this._effectKeys = '';
         this.container = null;
