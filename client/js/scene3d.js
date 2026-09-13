@@ -11,18 +11,24 @@ const SCENE3D = {
     CAMERA_POS: { x: 0, y: 420, z: 380 },
     LOOK_AT: { x: 0, y: 0, z: 0 },
     DEBUG_AXES: false,
-    // #4 相机默认轨道参数（俯视斜角总览）
+    // #4 相机默认轨道参数；#11 firstPerson=主动玩家背后看竞技场
     CAMERA_MODES: {
-        overview: { radius: 520, pitch: 0.72, yaw: 0.35 }, // pitch: 弧度，从水平面向上抬
-        follow: { radius: 340, pitch: 0.95, yaw: 0.35 }
+        overview: { radius: 520, pitch: 0.72, yaw: 0.35 },
+        follow: { radius: 340, pitch: 0.95, yaw: 0.35 },
+        // 斜角更大、相机更远 → 场景整体更小、能看到更多场地
+        firstPerson: { radius: 360, pitch: 0.62, yaw: 0.35 }
     },
-    CAMERA_MIN_RADIUS: 180,
+    CAMERA_MIN_RADIUS: 140,
     CAMERA_MAX_RADIUS: 900,
-    CAMERA_MIN_PITCH: 0.25,
+    CAMERA_MIN_PITCH: 0.15,
     CAMERA_MAX_PITCH: 1.35,
     FOLLOW_LERP: 0.08,
     ORBIT_DRAG_SPEED: 0.0055,
-    ZOOM_SPEED: 0.12
+    ZOOM_SPEED: 0.12,
+    // 换人视角动画：yaw 插值速度（rad/s 量级经 lerp）
+    FP_YAW_LERP: 0.06,
+    FP_PITCH_LERP: 0.08,
+    FP_RADIUS_LERP: 0.08
 };
 
 // 玩家配色（对齐 renderer.drawPlayer 的 playerColors）
@@ -104,6 +110,12 @@ class Scene3D {
         this._raf = 0;
         this._onResize = () => this.handleResize();
 
+        // #11 连线/全局特效（刚性连接、软绳、磁场、高能辐射）
+        this.linkFxGroup = null;
+        this.globalFxGroup = null;
+        this._linkViews = new Map(); // key -> view
+        this._globalViews = new Map(); // type -> view
+
         // #9 性能：缓存高频引用，避免每帧 getObjectByName / 重复分配
         this._mainRing = null;
         this._arcA = null;
@@ -121,16 +133,21 @@ class Scene3D {
         this._stakeMat = null;
         this._panelHandlers = [];
 
-        // #4 相机与操作映射
-        this.cameraMode = 'overview'; // overview | follow
-        this._camYaw = SCENE3D.CAMERA_MODES.overview.yaw;
-        this._camPitch = SCENE3D.CAMERA_MODES.overview.pitch;
-        this._camRadius = SCENE3D.CAMERA_MODES.overview.radius;
+        // #4 / #11 相机：默认第一视角（主动玩家背后）
+        this.cameraMode = 'firstPerson'; // overview | follow | firstPerson
+        this._camYaw = SCENE3D.CAMERA_MODES.firstPerson.yaw;
+        this._camPitch = SCENE3D.CAMERA_MODES.firstPerson.pitch;
+        this._camRadius = SCENE3D.CAMERA_MODES.firstPerson.radius;
+        this._camYawTarget = this._camYaw;
+        this._camPitchTarget = this._camPitch;
+        this._camRadiusTarget = this._camRadius;
         this._camFocus = new THREE.Vector3(0, 0, 0);
         this._camFocusTarget = new THREE.Vector3(0, 0, 0);
         this._orbiting = false;
         this._lastPointer = { x: 0, y: 0 };
         this._followPlayerId = null;
+        this._fpPlayerId = null; // firstPerson 跟随的主动玩家
+        this._fpManualOrbit = false; // 手动环绕后暂时不强制 yaw 对齐
         this._aimVisual = null; // { line, ring, marker }
         this._targetRings = []; // 目标选择高亮
         this._raycaster = null;
@@ -310,19 +327,30 @@ class Scene3D {
         return { root, line, ring, marker, lineMat, ringMat: ring.material, markerMat: marker.material };
     }
 
-    /** 切换相机模式：overview（总览）/ follow（跟随当前玩家） */
+    /** 切换相机模式：overview / follow / firstPerson */
     setCameraMode(mode) {
-        if (mode !== 'overview' && mode !== 'follow') return this.cameraMode;
+        if (mode !== 'overview' && mode !== 'follow' && mode !== 'firstPerson') return this.cameraMode;
         this.cameraMode = mode;
         const preset = SCENE3D.CAMERA_MODES[mode] || SCENE3D.CAMERA_MODES.overview;
-        this._camRadius = preset.radius;
-        this._camPitch = preset.pitch;
-        this._camYaw = preset.yaw;
+        this._camRadiusTarget = preset.radius;
+        this._camPitchTarget = preset.pitch;
+        if (mode === 'firstPerson') {
+            // yaw 交给 focusFirstPerson / 每帧根据玩家位置重算；保留当前 yaw 作起点
+            this._camRadius = this._camRadius || preset.radius;
+            this._camPitch = this._camPitch || preset.pitch;
+        } else {
+            this._camRadius = preset.radius;
+            this._camPitch = preset.pitch;
+            this._camYaw = preset.yaw;
+            this._camYawTarget = preset.yaw;
+        }
         return this.cameraMode;
     }
 
     toggleCameraMode() {
-        return this.setCameraMode(this.cameraMode === 'overview' ? 'follow' : 'overview');
+        const order = ['firstPerson', 'overview', 'follow'];
+        const i = order.indexOf(this.cameraMode);
+        return this.setCameraMode(order[(i + 1) % order.length]);
     }
 
     /** 设置跟随目标：2D 逻辑坐标点或 playerId；null 清除并回中心（总览） */
@@ -336,6 +364,9 @@ class Scene3D {
         }
         if (typeof target === 'number') {
             this._followPlayerId = target;
+            if (this.cameraMode === 'firstPerson') {
+                this.focusFirstPerson(target);
+            }
             return;
         }
         if (typeof target.x === 'number' && typeof target.y === 'number') {
@@ -344,25 +375,79 @@ class Scene3D {
         }
     }
 
-    /** 更新相机：orbit 缓动 + 可选跟随当前玩家 */
+    /**
+     * #11 切到某玩家的第一视角（背后看向竞技场中心）。
+     * yaw/pitch/radius 用目标缓动，产生换人转镜动画。
+     */
+    focusFirstPerson(playerId) {
+        const switching = this._fpPlayerId !== playerId;
+        this._fpPlayerId = playerId;
+        this._followPlayerId = playerId;
+        if (this.cameraMode !== 'firstPerson') {
+            this.cameraMode = 'firstPerson';
+        }
+        // 换人 / 主动切到该玩家：重新对齐背后 yaw（动画由 updateCamera 缓动）
+        if (switching || this._fpManualOrbit) {
+            this._fpManualOrbit = false;
+        }
+        const preset = SCENE3D.CAMERA_MODES.firstPerson;
+        this._camRadiusTarget = preset.radius;
+        this._camPitchTarget = preset.pitch;
+        return true;
+    }
+
+    /** 把 yaw 缓动到目标（最短角路径） */
+    _lerpAngle(cur, target, t) {
+        let d = target - cur;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        return cur + d * t;
+    }
+
+    /** 更新相机：orbit 缓动 / 跟随 / firstPerson 背后视角 */
     updateCamera(deltaMs, gameState) {
         if (!this.ready || !this.camera) return;
         const k = Math.min(1, (deltaMs || 16.67) / 16.67);
+        const phys = (gameState && Array.isArray(gameState.physicsPlayers))
+            ? gameState.physicsPlayers : null;
 
-        // 跟随模式：焦点对准当前玩家
-        if (this.cameraMode === 'follow') {
+        // 第一视角：焦点=主动玩家；yaw=从玩家指向场外（相机在背后）
+        if (this.cameraMode === 'firstPerson') {
+            const pid = this._fpPlayerId != null ? this._fpPlayerId : this._followPlayerId;
+            let px = 0, py = 0;
+            if (pid != null && phys) {
+                const pp = phys.find(p => p.playerId === pid);
+                if (pp && pp.position) {
+                    px = pp.position.x;
+                    py = pp.position.y;
+                }
+            }
+            this._camFocusTarget.set(px, 12, -py);
+            // 世界 XZ：玩家 (px, -py)；相机放在玩家远离中心一侧 → yaw = atan2(px, -py)
+            const len = Math.sqrt(px * px + py * py);
+            if (len > 8 && !this._fpManualOrbit) {
+                this._camYawTarget = Math.atan2(px, -py);
+            }
+            this._camYaw = this._lerpAngle(this._camYaw, this._camYawTarget, SCENE3D.FP_YAW_LERP * k * 1.6);
+            this._camPitch += (this._camPitchTarget - this._camPitch) * Math.min(1, SCENE3D.FP_PITCH_LERP * k * 2);
+            this._camRadius += (this._camRadiusTarget - this._camRadius) * Math.min(1, SCENE3D.FP_RADIUS_LERP * k * 2);
+        } else if (this.cameraMode === 'follow') {
             let focusX = 0, focusZ = 0;
-            if (this._followPlayerId != null && gameState && Array.isArray(gameState.physicsPlayers)) {
-                const pp = gameState.physicsPlayers.find(p => p.playerId === this._followPlayerId);
+            if (this._followPlayerId != null && phys) {
+                const pp = phys.find(p => p.playerId === this._followPlayerId);
                 if (pp && pp.position) {
                     focusX = pp.position.x;
                     focusZ = -pp.position.y;
                 }
             }
             this._camFocusTarget.set(focusX, 0, focusZ);
-        } else if (this._followPlayerId == null) {
-            // 总览模式下若无显式 focus，缓动回中心
-            // （setFollowTarget 点坐标时保持一段时间由外部控制；此处不强制回中）
+            // 手动 orbit 覆盖预设
+            this._camPitch = this._camPitchTarget;
+            this._camRadius = this._camRadiusTarget;
+        } else {
+            this._camYaw = this._lerpAngle(this._camYaw, this._camYawTarget, Math.min(1, SCENE3D.FOLLOW_LERP * k * 2));
+            this._camPitch += (this._camPitchTarget - this._camPitch) * Math.min(1, SCENE3D.FOLLOW_LERP * k * 2);
+            this._camRadius += (this._camRadiusTarget - this._camRadius) * Math.min(1, SCENE3D.FOLLOW_LERP * k * 2);
         }
 
         const lerp = SCENE3D.FOLLOW_LERP * k;
@@ -379,7 +464,7 @@ class Scene3D {
             this._camFocus.y + cy,
             this._camFocus.z + Math.cos(yaw) * ch
         );
-        this.camera.lookAt(this._camFocus.x, this._camFocus.y, this._camFocus.z);
+        this.camera.lookAt(this._camFocus.x, this._camFocus.y + 8, this._camFocus.z);
     }
 
     // ---------- #4 指针：环绕 / 缩放 / 拾取 ----------
@@ -451,9 +536,13 @@ class Scene3D {
             const dy = e.clientY - this._lastPointer.y;
             this._lastPointer.x = e.clientX;
             this._lastPointer.y = e.clientY;
+            // 用户手动环绕：同时改 current+target，且暂停 firstPerson 的 yaw 自动对齐一拍
+            this._fpManualOrbit = true;
             this._camYaw -= dx * SCENE3D.ORBIT_DRAG_SPEED;
+            this._camYawTarget = this._camYaw;
             this._camPitch += dy * SCENE3D.ORBIT_DRAG_SPEED;
             this._camPitch = Math.max(SCENE3D.CAMERA_MIN_PITCH, Math.min(SCENE3D.CAMERA_MAX_PITCH, this._camPitch));
+            this._camPitchTarget = this._camPitch;
             e.preventDefault();
             return;
         }
@@ -476,6 +565,7 @@ class Scene3D {
         const dir = e.deltaY > 0 ? 1 : -1;
         this._camRadius *= (1 + dir * SCENE3D.ZOOM_SPEED);
         this._camRadius = Math.max(SCENE3D.CAMERA_MIN_RADIUS, Math.min(SCENE3D.CAMERA_MAX_RADIUS, this._camRadius));
+        this._camRadiusTarget = this._camRadius;
     }
 
     /** 拾取：瞄准确认 / 目标玩家选择 */
@@ -660,6 +750,14 @@ class Scene3D {
         this.effectsGroup = new THREE.Group();
         this.effectsGroup.name = 'arenaEffects';
         this.arenaGroup.add(this.effectsGroup);
+
+        // #11 连线 / 全场特效组
+        this.linkFxGroup = new THREE.Group();
+        this.linkFxGroup.name = 'linkFx';
+        this.scene.add(this.linkFxGroup);
+        this.globalFxGroup = new THREE.Group();
+        this.globalFxGroup.name = 'globalFx';
+        this.scene.add(this.globalFxGroup);
 
         this.playersGroup = new THREE.Group();
         this.playersGroup.name = 'players';
@@ -1068,6 +1166,400 @@ class Scene3D {
             this.effectsGroup.add(group);
             this._effectMeshes.push(group);
         });
+    }
+
+    /**
+     * #11 连线特效：刚性连接 / 软绳 —— 每帧按玩家位置更新线与粒子。
+     * 2D renderer 在 drawEffects 里画锁链/绳；这里同步为 3D 线段+光点。
+     */
+    syncLinkEffects(effects, physicsPlayers) {
+        if (!this.ready || !this.linkFxGroup) return;
+        const list = Array.isArray(effects) ? effects : [];
+        const phys = Array.isArray(physicsPlayers) ? physicsPlayers : [];
+        const links = list.filter(e =>
+            (e.type === 'rigid_constraint' || e.type === 'soft_rope') &&
+            e.player1Id != null && e.player2Id != null
+        );
+        const seen = new Set();
+
+        links.forEach(e => {
+            const p1 = phys.find(p => p.playerId === e.player1Id);
+            const p2 = phys.find(p => p.playerId === e.player2Id);
+            if (!p1 || !p2 || !p1.position || !p2.position) return;
+            const key = `${e.type}|${e.player1Id}|${e.player2Id}`;
+            seen.add(key);
+            let view = this._linkViews.get(key);
+            if (!view) {
+                view = this._createLinkView(e.type);
+                this._linkViews.set(key, view);
+                this.linkFxGroup.add(view.root);
+            }
+            this._updateLinkView(view, p1, p2, e);
+        });
+
+        this._linkViews.forEach((view, key) => {
+            if (seen.has(key)) return;
+            this.linkFxGroup.remove(view.root);
+            view.root.traverse(obj => {
+                if (obj.geometry) obj.geometry.dispose();
+                if (obj.material) {
+                    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+                    mats.forEach(m => m.dispose());
+                }
+            });
+            this._linkViews.delete(key);
+        });
+    }
+
+    _createLinkView(type) {
+        const root = new THREE.Group();
+        root.name = `link_${type}`;
+        const isRigid = type === 'rigid_constraint';
+        const color = isRigid ? 0xffd700 : 0x5ba3d9;
+        const coreColor = isRigid ? 0xfff8c0 : 0xb8dff5;
+
+        const lineMat = new THREE.LineBasicMaterial({
+            color,
+            transparent: true,
+            opacity: 0.9,
+            depthWrite: false
+        });
+        // 折线：便于软绳轻微下垂
+        const pts = [];
+        const SEGS = 24;
+        for (let i = 0; i <= SEGS; i++) pts.push(new THREE.Vector3());
+        const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
+        const line = new THREE.Line(lineGeo, lineMat);
+        line.position.y = 14;
+        root.add(line);
+
+        const coreMat = new THREE.LineBasicMaterial({
+            color: coreColor,
+            transparent: true,
+            opacity: 0.45,
+            depthWrite: false
+        });
+        const coreGeo = lineGeo.clone();
+        const core = new THREE.Line(coreGeo, coreMat);
+        core.position.y = 14.2;
+        root.add(core);
+
+        // 端点球
+        const beadGeo = new THREE.SphereGeometry(isRigid ? 5 : 3.5, 10, 10);
+        const beadMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, depthWrite: false });
+        const b1 = new THREE.Mesh(beadGeo, beadMat);
+        const b2 = new THREE.Mesh(beadGeo, beadMat);
+        b1.position.y = 14;
+        b2.position.y = 14;
+        root.add(b1, b2);
+
+        // 流动粒子（6 个）
+        const dotGeo = new THREE.SphereGeometry(isRigid ? 2.4 : 2.0, 8, 8);
+        const dots = [];
+        for (let i = 0; i < 6; i++) {
+            const m = new THREE.MeshBasicMaterial({
+                color: isRigid ? 0xffee66 : 0x88ccff,
+                transparent: true,
+                opacity: 0.75,
+                depthWrite: false
+            });
+            const d = new THREE.Mesh(dotGeo, m);
+            d.position.y = 14;
+            root.add(d);
+            dots.push(d);
+        }
+
+        // 中点标签（刚性）
+        let badge = null;
+        if (isRigid) {
+            const tex = this._makeTextSpriteTexture('🔗', 48);
+            if (tex) {
+                const sm = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+                badge = new THREE.Sprite(sm);
+                badge.scale.set(22, 22, 1);
+                badge.position.y = 22;
+                root.add(badge);
+            }
+        }
+
+        return { root, line, core, b1, b2, dots, badge, lineMat, coreMat, beadMat, isRigid, _pts: pts };
+    }
+
+    _updateLinkView(view, p1, p2, effect) {
+        const x1 = p1.position.x, z1 = -p1.position.y;
+        const x2 = p2.position.x, z2 = -p2.position.y;
+        const dx = x2 - x1, dz = z2 - z1;
+        const len = Math.sqrt(dx * dx + dz * dz) || 1;
+        const t = this.clock ? this.clock.getElapsedTime() : 0;
+
+        // 软绳：接近原长时显示拉紧（偏红/蓝）
+        let locked = false;
+        let sagAmp = 0;
+        if (!view.isRigid) {
+            const dist2d = Math.sqrt(
+                (p2.position.x - p1.position.x) ** 2 + (p2.position.y - p1.position.y) ** 2
+            );
+            const orig = effect.originalLength || 100;
+            locked = dist2d >= orig * 0.99;
+            sagAmp = locked ? 2 : 10 + 3 * Math.sin(t * 2);
+            view.lineMat.color.setHex(locked ? 0xff6666 : 0x5ba3d9);
+            view.lineMat.opacity = locked ? 0.95 : 0.75;
+            view.beadMat.color.setHex(locked ? 0xff8888 : 0x5ba3d9);
+        } else {
+            view.lineMat.opacity = 0.75 + 0.2 * Math.sin(t * 6);
+        }
+
+        // 折线采样
+        const segs = view._pts.length - 1;
+        const nx = -dz / len, nz = dx / len;
+        for (let i = 0; i <= segs; i++) {
+            const u = i / segs;
+            const sag = Math.sin(u * Math.PI) * sagAmp;
+            view._pts[i].set(x1 + dx * u + nx * sag, 0, z1 + dz * u + nz * sag);
+        }
+        view.line.geometry.setFromPoints(view._pts);
+        view.core.geometry.setFromPoints(view._pts.map(p => p.clone().setY(p.y + 0.3)));
+
+        view.b1.position.set(x1, 14, z1);
+        view.b2.position.set(x2, 14, z2);
+
+        // 流动粒子沿连线
+        view.dots.forEach((d, i) => {
+            const u = ((t * 0.45 + i / view.dots.length) % 1);
+            const sag = Math.sin(u * Math.PI) * sagAmp;
+            d.position.set(x1 + dx * u + nx * sag, 14, z1 + dz * u + nz * sag);
+            d.material.opacity = 0.35 + 0.5 * Math.sin(u * Math.PI);
+        });
+
+        if (view.badge) {
+            view.badge.position.set((x1 + x2) / 2, 22, (z1 + z2) / 2);
+        }
+    }
+
+    /** 全场特效：磁场 / 高能辐射（无 x/y/radius 的持久场） */
+    syncGlobalEffects(effects, physicsPlayers) {
+        if (!this.ready || !this.globalFxGroup) return;
+        const list = Array.isArray(effects) ? effects : [];
+        const phys = Array.isArray(physicsPlayers) ? physicsPlayers : [];
+        const want = {
+            magneticField: list.find(e => e.type === 'magneticField'),
+            highEnergyRadiation: list.filter(e => e.type === 'highEnergyRadiation')
+        };
+
+        // 磁场
+        if (want.magneticField) {
+            if (!this._globalViews.has('magneticField')) {
+                this._globalViews.set('magneticField', this._createMagneticView());
+            }
+            const v = this._globalViews.get('magneticField');
+            this._updateMagneticView(v, want.magneticField);
+        } else if (this._globalViews.has('magneticField')) {
+            this._disposeGlobalView('magneticField');
+        }
+
+        // 高能辐射：可能多条；key 按 ownerId
+        const radKeys = new Set();
+        want.highEnergyRadiation.forEach((e, idx) => {
+            const key = `her|${e.ownerId != null ? e.ownerId : idx}`;
+            radKeys.add(key);
+            if (!this._globalViews.has(key)) {
+                this._globalViews.set(key, this._createRadiationView());
+            }
+            const owner = e.ownerId != null ? phys.find(p => p.playerId === e.ownerId) : null;
+            this._updateRadiationView(this._globalViews.get(key), e, owner);
+        });
+        this._globalViews.forEach((v, key) => {
+            if (!key.startsWith('her|') || radKeys.has(key)) return;
+            this._disposeGlobalView(key);
+        });
+    }
+
+    _createMagneticView() {
+        const root = new THREE.Group();
+        root.name = 'fx_magneticField';
+        const R = SCENE3D.ARENA_RADIUS * 0.92;
+        const rings = [];
+        for (let i = 0; i < 3; i++) {
+            const r0 = R * (0.35 + i * 0.22);
+            const mesh = new THREE.Mesh(
+                new THREE.RingGeometry(r0 - 2, r0, 64),
+                new THREE.MeshBasicMaterial({
+                    color: 0x00ccff,
+                    transparent: true,
+                    opacity: 0.22,
+                    side: THREE.DoubleSide,
+                    depthWrite: false
+                })
+            );
+            mesh.rotation.x = -Math.PI / 2;
+            mesh.position.y = 0.4 + i * 0.05;
+            root.add(mesh);
+            rings.push(mesh);
+        }
+        // 中心 B 标记
+        const tex = this._makeTextSpriteTexture('B⃗', 64);
+        let label = null;
+        if (tex) {
+            label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+            label.scale.set(28, 28, 1);
+            label.position.y = 30;
+            root.add(label);
+        }
+        // 旋转粒子
+        const dots = [];
+        const dg = new THREE.SphereGeometry(2, 6, 6);
+        for (let i = 0; i < 16; i++) {
+            const m = new THREE.MeshBasicMaterial({ color: 0x66eeff, transparent: true, opacity: 0.55, depthWrite: false });
+            const d = new THREE.Mesh(dg, m);
+            d.position.y = 2;
+            root.add(d);
+            dots.push({ mesh: d, phase: (i / 16) * Math.PI * 2, radius: R * (0.4 + (i % 5) * 0.1) });
+        }
+        this.globalFxGroup.add(root);
+        return { root, rings, dots, label, R };
+    }
+
+    _updateMagneticView(v, effect) {
+        const t = this.clock ? this.clock.getElapsedTime() : 0;
+        v.rings.forEach((ring, i) => {
+            ring.rotation.z = t * (0.25 + i * 0.12) * (i % 2 === 0 ? 1 : -1);
+            ring.material.opacity = 0.15 + 0.12 * Math.sin(t * 2 + i);
+        });
+        v.dots.forEach(d => {
+            const a = d.phase + t * 0.8;
+            d.mesh.position.x = Math.cos(a) * d.radius;
+            d.mesh.position.z = Math.sin(a) * d.radius;
+            d.mesh.material.opacity = 0.35 + 0.35 * Math.sin(t * 3 + d.phase);
+        });
+        if (v.label) {
+            v.label.material.opacity = 0.55 + 0.25 * Math.sin(t * 3);
+        }
+    }
+
+    _createRadiationView() {
+        const root = new THREE.Group();
+        root.name = 'fx_highEnergyRadiation';
+        // 锥形：用扇形网格（自建 BufferGeometry 扇面）
+        const beamLen = 420;
+        const SEG = 16;
+        const positions = new Float32Array((SEG + 1) * 3 * 3);
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const mat = new THREE.MeshBasicMaterial({
+            color: 0xffcc44,
+            transparent: true,
+            opacity: 0.18,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+        const cone = new THREE.Mesh(geo, mat);
+        cone.position.y = 1.5;
+        root.add(cone);
+
+        // 中心亮线
+        const lineGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(0, 0, beamLen)
+        ]);
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffaa, transparent: true, opacity: 0.75, depthWrite: false });
+        const line = new THREE.Line(lineGeo, lineMat);
+        line.position.y = 8;
+        root.add(line);
+
+        const dots = [];
+        const dg = new THREE.SphereGeometry(1.8, 6, 6);
+        for (let i = 0; i < 8; i++) {
+            const m = new THREE.MeshBasicMaterial({ color: 0xffffcc, transparent: true, opacity: 0.6, depthWrite: false });
+            const d = new THREE.Mesh(dg, m);
+            root.add(d);
+            dots.push(d);
+        }
+        this.globalFxGroup.add(root);
+        return { root, cone, line, lineMat, mat, dots, beamLen, SEG };
+    }
+
+    _updateRadiationView(v, effect, owner) {
+        const t = this.clock ? this.clock.getElapsedTime() : 0;
+        // 源点跟随 owner
+        let sx = effect.x || 0, sz = -(effect.y || 0);
+        if (owner && owner.position) {
+            sx = owner.position.x;
+            sz = -owner.position.y;
+        }
+        v.root.position.set(sx, 0, sz);
+        // 2D angle：x 右、y 下 → 世界 (cos, -sin)；局部 +z 为前方 → rotation.y = π/2 + angle
+        const angle = effect.angle || 0;
+        v.root.rotation.y = Math.PI / 2 + angle;
+
+        const half = effect.coneHalfAngle || 0.1;
+        const L = v.beamLen;
+        const SEG = v.SEG;
+        const pos = v.cone.geometry.attributes.position.array;
+        let idx = 0;
+        // 扇面：原点 → 弧
+        for (let i = 0; i < SEG; i++) {
+            const a0 = -half + (2 * half * i) / SEG;
+            const a1 = -half + (2 * half * (i + 1)) / SEG;
+            // 局部：z 向前（远离源），x 横向
+            const p0 = [0, 0, 0];
+            const p1 = [Math.sin(a1) * L, 0, Math.cos(a1) * L];
+            const p2 = [Math.sin(a0) * L, 0, Math.cos(a0) * L];
+            pos[idx++] = p0[0]; pos[idx++] = p0[1]; pos[idx++] = p0[2];
+            pos[idx++] = p1[0]; pos[idx++] = p1[1]; pos[idx++] = p1[2];
+            pos[idx++] = p2[0]; pos[idx++] = p2[1]; pos[idx++] = p2[2];
+        }
+        v.cone.geometry.attributes.position.needsUpdate = true;
+        v.cone.geometry.computeBoundingSphere();
+
+        // 中心线：局部 +z
+        const lp = v.line.geometry.attributes.position;
+        lp.setXYZ(0, 0, 0, 0);
+        lp.setXYZ(1, 0, 0, L);
+        lp.needsUpdate = true;
+        v.lineMat.opacity = 0.55 + 0.3 * Math.sin(t * 7);
+        v.mat.opacity = 0.12 + 0.08 * Math.sin(t * 4);
+
+        v.dots.forEach((d, i) => {
+            const u = ((t * 1.4 + i / v.dots.length) % 1);
+            const spread = ((i % 3) - 1) * half * 0.7;
+            d.position.set(Math.sin(spread) * L * u, 8, Math.cos(spread) * L * u);
+            d.material.opacity = 0.5 * (1 - u);
+        });
+    }
+
+    _disposeGlobalView(key) {
+        const v = this._globalViews.get(key);
+        if (!v) return;
+        if (v.root && v.root.parent) v.root.parent.remove(v.root);
+        v.root.traverse(obj => {
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) {
+                if (obj.material.map) obj.material.map.dispose();
+                obj.material.dispose();
+            }
+        });
+        this._globalViews.delete(key);
+    }
+
+    /** 简易文字 Sprite 纹理（无文字则 null） */
+    _makeTextSpriteTexture(text, size) {
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return null;
+            ctx.clearRect(0, 0, size, size);
+            ctx.font = `bold ${Math.floor(size * 0.7)}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#ffe066';
+            ctx.fillText(text, size / 2, size / 2);
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.needsUpdate = true;
+            return tex;
+        } catch (e) {
+            return null;
+        }
     }
 
     // ---------- #5 卡牌临时特效（tempEffects → 3D 占位）----------
@@ -2232,6 +2724,9 @@ class Scene3D {
 
         if (gameState) {
             this.syncArenaEffects(gameState.effects);
+            // #11 连线（刚性/软绳）+ 全场（磁场/高能辐射）
+            this.syncLinkEffects(gameState.effects, gameState.physicsPlayers);
+            this.syncGlobalEffects(gameState.effects, gameState.physicsPlayers);
             this.syncPlayers(gameState);
             // #5 卡牌临时特效 + 炮弹
             this.syncTempEffects(gameState.tempEffects, t);
@@ -2343,6 +2838,17 @@ class Scene3D {
             });
             this._effectMeshes = [];
         }
+        // #11 连线 / 全场特效
+        if (this._linkViews) {
+            this._linkViews.forEach(view => {
+                if (view.root && view.root.parent) view.root.parent.remove(view.root);
+                view.root.traverse(disposeObject);
+            });
+            this._linkViews.clear();
+        }
+        if (this._globalViews) {
+            [...this._globalViews.keys()].forEach(k => this._disposeGlobalView(k));
+        }
 
         if (this.scene) {
             this.scene.traverse(disposeObject);
@@ -2381,6 +2887,8 @@ class Scene3D {
         this.dangerZone = null;
         this.dangerMat = null;
         this.effectsGroup = null;
+        this.linkFxGroup = null;
+        this.globalFxGroup = null;
         this.centerMark = null;
         this.playersGroup = null;
         this.tempFxGroup = null;

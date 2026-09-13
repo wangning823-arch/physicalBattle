@@ -93,6 +93,11 @@ const GameUI = {
         this.gameLoopRunning = true;
         this.updateUI();
         this.handleCurrentPhase();
+        // #11 开局切到主动玩家第一视角（有转镜动画）
+        if (window.Scene3DInstance && window.Scene3DInstance.ready) {
+            const cp = this.game.players[this.game.currentPlayerIndex];
+            if (cp) window.Scene3DInstance.focusFirstPerson(cp.id);
+        }
         this.gameLoop(0, this._loopGen);
         console.log('Game loop started');
     },
@@ -417,10 +422,16 @@ const GameUI = {
         const s3d = window.Scene3DInstance;
         if (!s3d || !s3d.ready || !this.game) return;
 
-        // 跟随当前回合玩家
-        if (s3d.cameraMode === 'follow') {
+        // #11 主动玩家第一视角 / 跟随：每帧对齐当前回合
+        if (s3d.cameraMode === 'firstPerson' || s3d.cameraMode === 'follow') {
             const cp = this.game.players[this.game.currentPlayerIndex];
-            if (cp) s3d.setFollowTarget(cp.id);
+            if (cp) {
+                if (s3d.cameraMode === 'firstPerson') {
+                    if (s3d._fpPlayerId !== cp.id) s3d.focusFirstPerson(cp.id);
+                } else {
+                    s3d.setFollowTarget(cp.id);
+                }
+            }
         } else if (!s3d._orbiting) {
             // 总览：焦点回中心（除非刚手动 focus）
             s3d.setFollowTarget(null);
@@ -470,6 +481,13 @@ const GameUI = {
         if (this.game.state === GAME_STATES.GAME_OVER) return;
 
         this.viewingTab = this.game.currentPlayerIndex;
+        // #11 换人：动画转到当前主动玩家第一视角（仅 playerId 变化时）
+        if (window.Scene3DInstance && window.Scene3DInstance.ready) {
+            const cp = this.game.players[this.game.currentPlayerIndex];
+            if (cp && window.Scene3DInstance._fpPlayerId !== cp.id) {
+                window.Scene3DInstance.focusFirstPerson(cp.id);
+            }
+        }
 
         if (this.game.isAITurn()) {
             this.triggerAITurn();
@@ -911,6 +929,11 @@ const GameUI = {
             }
             this.viewingTab = this.game.currentPlayerIndex;
             this.updateUI();
+            // #11 出牌完成后转到下一玩家（相对）第一视角
+            if (window.Scene3DInstance && window.Scene3DInstance.ready) {
+                const cp = this.game.players[this.game.currentPlayerIndex];
+                if (cp) window.Scene3DInstance.focusFirstPerson(cp.id);
+            }
             this.handleCurrentPhase();
         }
     },

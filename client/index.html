@@ -62,28 +62,37 @@
             <h2>📋 更新日志</h2>
             <div class="changelog-scroll">
                 <div class="changelog-version">
-                    <h3>v1.5.3 <span class="changelog-date">2026-07-16</span></h3>
+                    <h3>v1.6 <span class="changelog-date">2026-09-13</span></h3>
+                    <ul>
+                        <li>3D 竞技场（Three.js）：默认开启；可用 ?render=2d 回退经典 2D</li>
+                        <li>相机总览/跟随（C）、环绕旋转、滚轮缩放，射线瞄准与目标高亮</li>
+                        <li>卡牌特效、边界危险带、出界淘汰等与物理状态同步到 3D</li>
+                        <li>审计优化：修复双循环、跨局牌库泄漏、量子/AI 出牌等多处逻辑问题</li>
+                    </ul>
+                </div>
+                <div class="changelog-version">
+                    <h3>v1.5.3 <span class="changelog-date">2026-09-13</span></h3>
                     <ul>
                         <li>移除卡牌：随机跳跃</li>
                         <li>布朗运动冲量固定为 500，说明与数值一致</li>
                     </ul>
                 </div>
                 <div class="changelog-version">
-                    <h3>v1.5.2 <span class="changelog-date">2026-07-16</span></h3>
+                    <h3>v1.5.2 <span class="changelog-date">2026-09-13</span></h3>
                     <ul>
                         <li>新增卡牌：能量抽取（稀有）— 对手损失1点能量，自己获得1点（对手无能量时无效）</li>
                         <li>AI 会在对手能量充足时优先抽能，破坏对方节奏</li>
                     </ul>
                 </div>
                 <div class="changelog-version">
-                    <h3>v1.5.1 <span class="changelog-date">2026-07-16</span></h3>
+                    <h3>v1.5.1 <span class="changelog-date">2026-09-13</span></h3>
                     <ul>
                         <li>新增卡牌：电荷转移（普通）— 将对手的电荷转移到自己身上</li>
                         <li>AI 会优先在对手带电时使用电荷转移，抢夺电磁炮/磁场资源</li>
                     </ul>
                 </div>
                 <div class="changelog-version">
-                    <h3>v1.5 <span class="changelog-date">2026-07-15</span></h3>
+                    <h3>v1.5 <span class="changelog-date">2026-09-13</span></h3>
                     <ul>
                         <li>新增键盘快捷键：数字键 1-9 出对应手牌，E/Enter 完成出牌，Esc 取消瞄准/选择</li>
                         <li>手牌卡片显示对应数字快捷键角标</li>
@@ -234,7 +243,7 @@
                 <div id="three-container" class="hidden"></div>
                 <div id="mode-3d-badge">3D 竞技场</div>
                 <div id="mode-3d-hint">
-                    左键瞄准 · 右键/中键旋转 · 滚轮缩放 · <kbd>C</kbd> 切换跟随
+                    主动玩家背后视角 · 左键瞄准 · 右键/中键旋转 · 滚轮缩放 · <kbd>C</kbd> 切换视角
                 </div>
             </div>
             
@@ -547,13 +556,13 @@
             document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
         }
     </script>
-    <script src="js/constants.js?v=20260716d"></script>
-    <script src="js/physics.js?v=20260716d"></script>
-    <script src="js/cardSystem.js?v=20260716d"></script>
-    <script src="js/renderer.js?v=20260716d"></script>
-    <script src="js/scene3d.js?v=20260716e"></script>
-    <script src="js/aiPlayer.js?v=20260716d"></script>
-    <script src="js/game.js?v=20260716d"></script>
-    <script src="js/main.js?v=20260716d"></script>
+    <script src="js/constants.js?v=20260913a"></script>
+    <script src="js/physics.js?v=20260913a"></script>
+    <script src="js/cardSystem.js?v=20260913a"></script>
+    <script src="js/renderer.js?v=20260913a"></script>
+    <script src="js/scene3d.js?v=20260913a"></script>
+    <script src="js/aiPlayer.js?v=20260913a"></script>
+    <script src="js/game.js?v=20260913a"></script>
+    <script src="js/main.js?v=20260913a"></script>
 </body>
 </html>
