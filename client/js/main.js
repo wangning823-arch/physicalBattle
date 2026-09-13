@@ -4,6 +4,7 @@ const GameUI = {
     gameStarted: false,
     gameLoopRunning: false,
     viewingTab: 0,
+    _loopGen: 0,
 
     init() {
         console.log('=== Game Initializing ===');
@@ -32,7 +33,9 @@ const GameUI = {
 
     startGame(mode, difficulty) {
         // 停掉可能仍在跑的旧循环，并重置时间戳，避免新局第一帧拿到巨大/负的 deltaTime
+        // 用 generation token：仅置 false 再置 true 时，尚未执行的旧 RAF 回调会看到 true 而复活成双循环
         this.gameLoopRunning = false;
+        this._loopGen++;
         this.lastTime = 0;
 
         const modal = document.getElementById('mode-select-modal');
@@ -90,7 +93,7 @@ const GameUI = {
         this.gameLoopRunning = true;
         this.updateUI();
         this.handleCurrentPhase();
-        this.gameLoop();
+        this.gameLoop(0, this._loopGen);
         console.log('Game loop started');
     },
 
@@ -1038,8 +1041,9 @@ const GameUI = {
         });
     },
 
-    gameLoop(currentTime = 0) {
+    gameLoop(currentTime = 0, gen = this._loopGen) {
         if (!this.gameLoopRunning) return;
+        if (gen !== this._loopGen) return; // 旧循环残留回调，直接作废
 
         try {
             const deltaTime = currentTime - this.lastTime;
@@ -1067,7 +1071,7 @@ const GameUI = {
         } catch (e) {
             console.error('Game loop error:', e);
         }
-        requestAnimationFrame((time) => this.gameLoop(time));
+        requestAnimationFrame((time) => this.gameLoop(time, gen));
     }
 };
 
