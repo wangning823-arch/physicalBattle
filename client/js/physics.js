@@ -44,7 +44,8 @@ class PhysicsEngine {
                     const projData = this.projectiles[projIndex];
 
                     // 跳过发射者（保护期10帧）
-                    if (projData.graceFrames <= 10) continue;
+                    // 永久跳过发射者：炮弹不应命中自己（原 graceFrames 判断既挡不住首帧，保护期后还会误伤自己）
+                    if (projData.ownerId === player.playerId) continue;
 
                     // 量子叠加态：免疫炮弹动量转移，炮弹穿过
                     if (player.isQuantum) continue;
@@ -308,7 +309,6 @@ class PhysicsEngine {
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
             const proj = this.projectiles[i];
             proj.life--;
-            proj.graceFrames = (proj.graceFrames || 0) + 1;
 
             // 检查是否飞出场外或超时
             const pos = proj.body.position;
@@ -453,14 +453,6 @@ class PhysicsEngine {
                 });
             }
         });
-        
-        // 处理电荷之间的库仑力
-        if (this.players.length === 2) {
-            const p1 = this.players[0];
-            const p2 = this.players[1];
-            
-            // 从 game.js 获取玩家的电荷信息（我们需要一种方式传递电荷，暂时先在 game.js 处理）
-        }
     }
 
     addEffect(effect) {
