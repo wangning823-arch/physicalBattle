@@ -680,15 +680,9 @@ const GameUI = {
     
     // 手动充能热机
     chargeHeatEngine(playerId) {
-        const player = this.game.players.find(p => p.id === playerId);
-        
-        if (!player || !player.heatEngine || !player.heatEngine.active) return;
-        if (player.energy < 1 || player.heatEngine.charge >= player.heatEngine.maxCharge) return;
-        
-        player.energy -= 1;
-        player.heatEngine.charge += 1;
-        
-        this.updateUI();
+        if (this.game.chargeHeatEngine(playerId)) {
+            this.updateUI();
+        }
     },
 
     // 手动发射热机（进入瞄准模式）

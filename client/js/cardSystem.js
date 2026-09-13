@@ -203,7 +203,7 @@ const CARDS_DATABASE = [
         type: CARD_TYPES.HEAT,
         cost: 4,
         icon: '🔥',
-        description: '召唤热机附身，2回合内可充能（最多6点），充几点就造成几倍动量冲击，被冰冻则能量归零',
+        description: '召唤热机附身，3回合内可充能（最多6点），充几点就造成几倍动量冲击，被冰冻则能量归零',
         formula: 'W = Q·η',
         effect: { heatEngine: true, duration: 2, maxCharge: 6, impulseMultiplier: 1 },
         rarity: 'epic'

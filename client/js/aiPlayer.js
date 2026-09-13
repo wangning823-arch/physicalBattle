@@ -16,7 +16,9 @@ class AIPlayer {
                 aoeSpreadMultiplier: 2.5,
                 discardStrategy: 'random',
                 energyBonus: 0,
-                strategicScoring: false
+                strategicScoring: false,
+                heatChargePerTurn: 1,
+                heatFireThreshold: 2
             },
             normal: {
                 thinkingDelay: 800,
@@ -28,7 +30,9 @@ class AIPlayer {
                 aoeSpreadMultiplier: 1.0,
                 discardStrategy: 'rarity',
                 energyBonus: 0,
-                strategicScoring: false
+                strategicScoring: false,
+                heatChargePerTurn: 2,
+                heatFireThreshold: 3
             },
             hard: {
                 thinkingDelay: 400,
@@ -40,7 +44,9 @@ class AIPlayer {
                 aoeSpreadMultiplier: 0.25,
                 discardStrategy: 'scored',
                 energyBonus: 1,
-                strategicScoring: true
+                strategicScoring: true,
+                heatChargePerTurn: 2,
+                heatFireThreshold: 3
             }
         };
 
@@ -123,12 +129,98 @@ class AIPlayer {
 
         this.isThinking = false;
 
-        // quantum_superposition 等卡牌已在 playCard 内推进回合，不可二次 advance
+        // 热机：出牌结束后用剩余能量补能，再视充能/临期决定是否发射
+        // 量子叠加已在 playCard 内推进回合，此时不要再动热机
         if (!turnAlreadyEnded) {
+            await this.manageHeatEngine(playerId);
             this.game.advanceGamePhase();
         }
         if (this.game.isNewRound) {
             this.game.drawCardsForAllPlayers();
+        }
+    }
+
+    // AI 主动管理热机：补能 + 发射决策
+    async manageHeatEngine(playerId) {
+        const player = this.game.players.find(p => p.id === playerId);
+        if (!player || player.eliminated) return;
+        const he = player.heatEngine;
+        if (!he || !he.active) return;
+
+        // 1) 用剩余能量补能（保留一点能量给其他手牌，除非热机已临期）
+        const almostExpired = he.ownerTurnsRemaining <= 1;
+        let charged = 0;
+        while (
+            player.energy >= 1 &&
+            he.charge < he.maxCharge &&
+            charged < this.difficulty.heatChargePerTurn
+        ) {
+            // 仍有别的可打出的牌时，不要把能量抽干
+            const hasOtherPlayable = player.cards.some(c => c.cost <= player.energy - 1);
+            if (!almostExpired && hasOtherPlayable && player.energy <= 2 && he.charge >= 1) {
+                break;
+            }
+            if (!this.game.chargeHeatEngine(playerId)) break;
+            charged++;
+            if (this.onCardPlayed) {
+                this.onCardPlayed({
+                    id: '_heat_charge',
+                    name: `热机充能 ${he.charge}/${he.maxCharge}`,
+                    icon: '⚡',
+                    type: 'heat',
+                    cost: 0,
+                    rarity: 'common',
+                    formula: '',
+                    description: '',
+                    effect: {}
+                });
+            }
+            await this.delay(this.cardPlayDelay);
+        }
+
+        // 2) 发射决策：充能够阈值，或即将过期且至少有1点充能
+        if (he.charge <= 0) return;
+
+        const target = this.game.findClosestOpponent(playerId);
+        if (!target || target.eliminated) return;
+        if (target.effects && target.effects.some(e => e.type === 'anchor')) return;
+        if (target.quantumState) return;
+
+        const selfPhysics = this.game.physics.getPlayer(playerId);
+        const targetPhysics = this.game.physics.getPlayer(target.id);
+        if (!selfPhysics || !targetPhysics) return;
+
+        const targetDistFromCenter = Math.sqrt(
+            targetPhysics.position.x ** 2 + targetPhysics.position.y ** 2
+        );
+        const targetNearEdge = targetDistFromCenter > GAME_CONFIG.ARENA_RADIUS * 0.7;
+
+        const shouldFire =
+            almostExpired ||
+            he.charge >= this.difficulty.heatFireThreshold ||
+            (this.difficulty.strategicScoring && targetNearEdge && he.charge >= 2);
+
+        if (!shouldFire) return;
+
+        // 瞄准目标位置（绝对坐标），困难模式更准
+        const spread = this.difficulty.aimSpreadMultiplier * 40;
+        const aimX = targetPhysics.position.x + (Math.random() - 0.5) * spread;
+        const aimY = targetPhysics.position.y + (Math.random() - 0.5) * spread;
+        const firedCharge = he.charge;
+        const ok = this.game.fireHeatEngine(playerId, aimX, aimY);
+        if (ok && this.onCardPlayed) {
+            this.onCardPlayed({
+                id: '_heat_fire',
+                name: `热机发射 ×${firedCharge}`,
+                icon: '🔥',
+                type: 'heat',
+                cost: 0,
+                rarity: 'epic',
+                formula: '',
+                description: '',
+                effect: {}
+            });
+            await this.delay(this.cardPlayDelay);
         }
     }
 

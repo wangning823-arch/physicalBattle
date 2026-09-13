@@ -989,6 +989,16 @@ class Game {
         }
     }
 
+    // 热机充能：消耗1点能量增加1点充能（人类UI与AI共用）
+    chargeHeatEngine(playerId) {
+        const player = this.players.find(p => p.id === playerId);
+        if (!player || !player.heatEngine || !player.heatEngine.active) return false;
+        if (player.energy < 1 || player.heatEngine.charge >= player.heatEngine.maxCharge) return false;
+        player.energy -= 1;
+        player.heatEngine.charge += 1;
+        return true;
+    }
+
     // 手动发射热机
     // 找到最近的活着的对手
     findClosestOpponent(playerId) {
