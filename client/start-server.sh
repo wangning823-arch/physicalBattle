@@ -1,26 +1,24 @@
-#!/bin/bash
-cd /home/root1/projects/physicalBattle/client
+#!/usr/bin/env bash
+# 从任意位置调用也可：始终以本脚本所在目录为根
+cd "$(cd "$(dirname "$0")" && pwd)" || exit 1
 
-# Kill any existing process on port 8888
-pkill -f "node server.js" 2>/dev/null || true
-lsof -ti :8888 | xargs -r kill -9 2>/dev/null || true
+if command -v pkill >/dev/null 2>&1; then
+  pkill -f "node server.js" 2>/dev/null || true
+fi
+if command -v lsof >/dev/null 2>&1; then
+  lsof -ti :8888 | xargs -r kill -9 2>/dev/null || true
+fi
+sleep 0.5
 
-# Wait a moment
-sleep 1
-
-# Start the server in background with nohup
 nohup node server.js > server.log 2>&1 &
 echo $! > server.pid
+sleep 1
 
-# Wait and check
-sleep 2
-if netstat -tuln 2>/dev/null | grep -q :8888 || ss -tuln 2>/dev/null | grep -q :8888; then
-    echo "✅ Server started successfully on port 8888"
-    echo "📡 Access URLs:"
-    echo "   - Local: http://localhost:8888"
-    # Try to get IP addresses
-    echo "   - Network: $(ip -4 addr show 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '127.0.0.1' | head -1 | awk '{print "http://" $0 ":8888"}')"
+if command -v ss >/dev/null 2>&1 && ss -tuln 2>/dev/null | grep -q :8888; then
+  echo "OK http://localhost:8888/  (3D default, ?render=2d for 2D)"
+elif command -v netstat >/dev/null 2>&1 && netstat -tuln 2>/dev/null | grep -q :8888; then
+  echo "OK http://localhost:8888/  (3D default, ?render=2d for 2D)"
 else
-    echo "❌ Server failed to start"
-    cat server.log
+  echo "WARN port 8888 not confirmed; check server.log"
+  cat server.log 2>/dev/null || true
 fi

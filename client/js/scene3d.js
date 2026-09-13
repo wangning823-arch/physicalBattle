@@ -150,7 +150,9 @@ class Scene3D {
     static shouldEnable() {
         try {
             const q = new URLSearchParams(window.location.search);
-            return q.get('render') === '3d' || q.get('3d') === '1';
+            // ?render=2d 强制 2D；默认走 3D（THREE 未加载时由 isSupported 兜底回 2D）
+            if (q.get('render') === '2d' || q.get('2d') === '1') return false;
+            return q.get('render') === '3d' || q.get('3d') === '1' || !q.get('render');
         } catch (e) {
             return false;
         }
@@ -2429,7 +2431,7 @@ function ensureScene3D() {
                 if (panel) panel.classList.toggle('collapsed');
             };
             h3.addEventListener('click', handler);
-            this._panelHandlers.push({ el: h3, handler });
+            window.Scene3DInstance._panelHandlers.push({ el: h3, handler });
         });
     }
     return window.Scene3DInstance;
