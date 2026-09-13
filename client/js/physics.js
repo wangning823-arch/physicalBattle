@@ -170,7 +170,6 @@ class PhysicsEngine {
      * 创建软绳约束
      */
     createSoftRope(duration, player1Id, player2Id, currentTurn) {
-        console.log('=== createSoftRope 被调用，duration:', duration);
         if (this.players.length < 2) return;
         player1Id = player1Id || 1;
         player2Id = player2Id || 2;
@@ -230,30 +229,8 @@ class PhysicsEngine {
         this.players.push(player);
         Matter.World.add(this.world, player);
 
-        // 添加碰撞监听，处理有定位锚的玩家碰撞问题
-        Matter.Events.on(this.engine, 'collisionStart', (event) => {
-            const pairs = event.pairs;
-            for (let i = 0; i < pairs.length; i++) {
-                const bodyA = pairs[i].bodyA;
-                const bodyB = pairs[i].bodyB;
-
-                // 检查碰撞双方是否是玩家
-                if (bodyA.playerId && bodyB.playerId) {
-                    const aAnchored = this.isPlayerAnchored(bodyA.playerId);
-                    const bAnchored = this.isPlayerAnchored(bodyB.playerId);
-
-                    // 如果任意一方有定位锚，碰撞后立即重置有锚玩家的位置和速度
-                    if (aAnchored && bodyA._startPos) {
-                        Matter.Body.setPosition(bodyA, { x: bodyA._startPos.x, y: bodyA._startPos.y });
-                        Matter.Body.setVelocity(bodyA, { x: 0, y: 0 });
-                    }
-                    if (bAnchored && bodyB._startPos) {
-                        Matter.Body.setPosition(bodyB, { x: bodyB._startPos.x, y: bodyB._startPos.y });
-                        Matter.Body.setVelocity(bodyB, { x: 0, y: 0 });
-                    }
-                }
-            }
-        });
+        // 定位锚的碰撞回弹由 update() 内基于 _anchorPos 的强制重置处理，
+        // 此处不再注册 per-player collisionStart（重开时会叠加监听且 _startPos 从未赋值）
 
         return player;
     }
@@ -552,5 +529,7 @@ class PhysicsEngine {
         // 清除炮弹
         this.projectiles.forEach(p => Matter.Composite.remove(this.engine.world, p.body));
         this.projectiles = [];
+        // 清空定位锚标记，避免新一局开局到首次 update 重建前误判玩家为有锚
+        this.anchoredPlayerIds = [];
     }
 }
