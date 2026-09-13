@@ -494,6 +494,25 @@ class Game {
                     });
                 }
                 break;
+            case 'energy_siphon':
+                // 能量抽取：对手-1能量，自己+1能量（可自增至上限）；对手无能量则无效
+                if (targetPlayer && !targetPlayer.eliminated && (targetPlayer.energy || 0) >= 1) {
+                    targetPlayer.energy -= 1;
+                    selfPlayer.energy = Math.min(selfPlayer.energy + 1, GAME_CONFIG.MAX_ENERGY);
+                    if (selfPhysics && targetPhysics) {
+                        this.physics.addTempEffect({
+                            type: 'energy_siphon',
+                            startX: targetPhysics.position.x,
+                            startY: targetPhysics.position.y,
+                            endX: selfPhysics.position.x,
+                            endY: selfPhysics.position.y,
+                            life: 800,
+                            maxLife: 800,
+                            _seed: Date.now() + 8888
+                        });
+                    }
+                }
+                break;
             case 'charge_transfer':
                 // 将对手电荷转移到自己身上
                 if (targetPlayer && !targetPlayer.eliminated) {

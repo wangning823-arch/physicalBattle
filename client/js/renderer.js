@@ -1736,13 +1736,17 @@ class Renderer {
                 ctx.globalAlpha = alpha;
                 ctx.fillText(isIncrease ? '▲' : '▼', x, y);
 
-            } else if (effect.type === 'charge_transfer') {
-                // 电荷转移 - 能量流
+            } else if (effect.type === 'charge_transfer' || effect.type === 'energy_siphon') {
+                // 电荷/能量转移 - 能量流
                 const startX = this.centerX + (effect.startX || 0);
                 const startY = this.centerY + (effect.startY || 0);
                 const endX = this.centerX + (effect.endX || 0);
                 const endY = this.centerY + (effect.endY || 0);
                 const alpha = progress;
+                const isSiphon = effect.type === 'energy_siphon';
+                const flowR = isSiphon ? 80 : 255;
+                const flowG = isSiphon ? 220 : 215;
+                const flowB = isSiphon ? 255 : 0;
 
                 // 能量流线
                 const dx = endX - startX, dy = endY - startY;
@@ -1756,14 +1760,14 @@ class Renderer {
                     const py = startY + dy * tt + ny * wave;
                     ctx.beginPath();
                     ctx.arc(px, py, 3 * alpha, 0, Math.PI * 2);
-                    ctx.fillStyle = `rgba(255,215,0,${alpha * 0.8})`;
+                    ctx.fillStyle = `rgba(${flowR},${flowG},${flowB},${alpha * 0.8})`;
                     ctx.fill();
                 }
 
                 // 起点和终点光晕
                 ctx.beginPath();
                 ctx.arc(startX, startY, 8 * alpha, 0, Math.PI * 2);
-                ctx.fillStyle = `rgba(255,215,0,${alpha * 0.5})`;
+                ctx.fillStyle = `rgba(${flowR},${flowG},${flowB},${alpha * 0.5})`;
                 ctx.fill();
                 ctx.beginPath();
                 ctx.arc(endX, endY, 8 * alpha, 0, Math.PI * 2);

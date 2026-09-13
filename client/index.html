@@ -62,6 +62,13 @@
             <h2>📋 更新日志</h2>
             <div class="changelog-scroll">
                 <div class="changelog-version">
+                    <h3>v1.5.2 <span class="changelog-date">2026-07-16</span></h3>
+                    <ul>
+                        <li>新增卡牌：能量抽取（稀有）— 对手损失1点能量，自己获得1点（对手无能量时无效）</li>
+                        <li>AI 会在对手能量充足时优先抽能，破坏对方节奏</li>
+                    </ul>
+                </div>
+                <div class="changelog-version">
                     <h3>v1.5.1 <span class="changelog-date">2026-07-16</span></h3>
                     <ul>
                         <li>新增卡牌：电荷转移（普通）— 将对手的电荷转移到自己身上</li>
@@ -415,6 +422,12 @@
                 <span class="card-name">布朗运动</span>
                 <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">随机方向移动</p>
             </div>
+            <div class="card" data-rarity="rare" data-cost="2" style="cursor: default; height: auto; min-width: 0;">
+                <span class="card-cost">2</span>
+                <span class="card-icon">🪫</span>
+                <span class="card-name">能量抽取</span>
+                <p style="margin: 4px 0 0; font-size: 10px; color: #aaa; text-align: center;">抽对手1点能量转给自己</p>
+            </div>
             <div class="card" data-rarity="rare" data-cost="1" style="cursor: default; height: auto; min-width: 0;">
                 <span class="card-cost">1</span>
                 <span class="card-icon">🪢</span>
@@ -509,12 +522,12 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
-    <script src="js/constants.js?v=20260505c"></script>
-    <script src="js/physics.js?v=20260505c"></script>
-    <script src="js/cardSystem.js?v=20260505c"></script>
-    <script src="js/renderer.js?v=20260505c"></script>
-    <script src="js/aiPlayer.js?v=20260505c"></script>
-    <script src="js/game.js?v=20260505c"></script>
+    <script src="js/constants.js?v=20260716a"></script>
+    <script src="js/physics.js?v=20260716a"></script>
+    <script src="js/cardSystem.js?v=20260716a"></script>
+    <script src="js/renderer.js?v=20260716a"></script>
+    <script src="js/aiPlayer.js?v=20260716a"></script>
+    <script src="js/game.js?v=20260716a"></script>
     <script src="js/main.js?v=20260505c"></script>
 </body>
 </html>

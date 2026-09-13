@@ -295,6 +295,17 @@ const CARDS_DATABASE = [
         formula: 'F = hν/c · σ',
         effect: { needsAim: true, targetEnemy: true, duration: 2, forceStrength: 0.01, coneHalfAngle: 5 },
         rarity: 'epic'
+    },
+    {
+        id: 'energy_siphon',
+        name: '能量抽取',
+        type: CARD_TYPES.MELEE,
+        cost: 2,
+        icon: '🪫',
+        description: '对手损失1点能量，自己获得1点能量（不可超上限）；对手能量不足时无效',
+        formula: "ΔE₁ = −1, ΔE₂ = +1",
+        effect: { targetEnemy: true },
+        rarity: 'rare'
     }
 ];
 
@@ -334,7 +345,8 @@ class CardSystem {
             'momentum_conservation': 10,
             'magnetic_field': 8,
             'entropy_increase': 6,
-            'high_energy_radiation': 8
+            'high_energy_radiation': 8,
+            'energy_siphon': 9
         };
 
         this.deck = [];

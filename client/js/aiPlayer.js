@@ -242,6 +242,17 @@ class AIPlayer {
                     score = 0;
                 }
                 break;
+            case 'energy_siphon':
+                // 对手无能量则无效；抽干对方大招节奏更有价值
+                if (!targetPlayer || (targetPlayer.energy || 0) < 1) {
+                    score = 0;
+                } else {
+                    score = 70;
+                    if (targetPlayer.energy >= 4) score += 20;
+                    else if (targetPlayer.energy === 1) score += 5;
+                    if (player.energy >= GAME_CONFIG.MAX_ENERGY - 1) score -= 20;
+                }
+                break;
             case 'electromagnetic_cannon':
                 score = (player.charge && player.charge !== 0) ? 80 : 0;
                 break;
