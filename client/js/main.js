@@ -105,6 +105,11 @@ const GameUI = {
             this.startGame('pve', 'easy');
         });
 
+        document.getElementById('diff-normal-btn').addEventListener('click', () => {
+            document.getElementById('difficulty-modal').classList.add('hidden');
+            this.startGame('pve', 'normal');
+        });
+
         document.getElementById('diff-hard-btn').addEventListener('click', () => {
             document.getElementById('difficulty-modal').classList.add('hidden');
             this.startGame('pve', 'hard');
@@ -275,6 +280,54 @@ const GameUI = {
                 this.switchTab(index);
             }
         });
+
+        // 键盘快捷键：1-6 出牌，E/Enter 结束出牌，Esc 取消瞄准/选择
+        document.addEventListener('keydown', (e) => {
+            if (!this.gameStarted) return;
+            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                this.cancelActiveAction();
+                return;
+            }
+
+            if (e.key === 'e' || e.key === 'E' || e.key === 'Enter') {
+                if (this.game.isAITurn()) return;
+                e.preventDefault();
+                const endTurnBtn = document.getElementById('end-turn-btn');
+                if (endTurnBtn && !endTurnBtn.disabled) endTurnBtn.click();
+                return;
+            }
+
+            if (e.key >= '1' && e.key <= '9') {
+                if (this.game.isAITurn()) return;
+                if (this.game.aimingState.active || this.game.heatEngineAiming.active || this.game.targetingState.active) return;
+                if (this.game.turnPhase !== 'play') return;
+                if (this.viewingTab !== this.game.currentPlayerIndex) return;
+                const index = parseInt(e.key, 10) - 1;
+                const currentPlayer = this.game.players[this.game.currentPlayerIndex];
+                if (!currentPlayer.cards[index]) return;
+                const cardEl = document.querySelector(`#cards-hand .card[data-index="${index}"]`);
+                if (cardEl && cardEl.classList.contains('disabled')) return;
+                e.preventDefault();
+                const result = this.game.playCard(currentPlayer.id, index);
+                if (result) this.updateUI();
+            }
+        });
+    },
+
+    cancelActiveAction() {
+        if (this.game.aimingState.active) {
+            this.game.cancelAim();
+            this.updateUI();
+        } else if (this.game.heatEngineAiming.active) {
+            this.game.cancelHeatEngineAim();
+            this.updateUI();
+        } else if (this.game.targetingState.active) {
+            this.game.cancelTarget();
+            this.updateUI();
+        }
     },
 
     // 处理当前阶段
@@ -402,11 +455,13 @@ const GameUI = {
             if (aiThinking) aiThinking.style.display = 'none';
 
             if (this.game.aimingState.active) {
-                endTurnBtn.textContent = '取消瞄准';
+                endTurnBtn.textContent = '取消瞄准 (Esc)';
+            } else if (this.game.heatEngineAiming.active) {
+                endTurnBtn.textContent = '取消瞄准 (Esc)';
             } else if (this.game.targetingState.active) {
-                endTurnBtn.textContent = '取消选择';
+                endTurnBtn.textContent = '取消选择 (Esc)';
             } else {
-                endTurnBtn.textContent = '完成出牌';
+                endTurnBtn.textContent = '完成出牌 (E)';
             }
         }
 
@@ -815,6 +870,7 @@ const GameUI = {
                 cardEl.classList.add('disabled');
             }
             cardEl.innerHTML = `
+                <span class="card-hotkey" aria-hidden="true">${index + 1}</span>
                 <span class="card-cost">${card.cost}</span>
                 <span class="card-icon">${card.icon}</span>
                 <span class="card-name">${card.name}</span>
