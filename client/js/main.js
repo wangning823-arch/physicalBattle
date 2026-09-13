@@ -1059,7 +1059,7 @@ const GameUI = {
                 this.game.render(state, this.aimingTarget, currentPlayerPhysics);
             }
             if (window.Scene3DInstance && window.Scene3DInstance.ready) {
-                window.Scene3DInstance.render(deltaTime || 16.67);
+                window.Scene3DInstance.render(deltaTime || 16.67, state);
             }
 
             this.updatePhysicsParamsPanel();
