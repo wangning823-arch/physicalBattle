@@ -166,6 +166,7 @@ const GameUI = {
             console.log('Cards area clicked');
             if (this.game.isAITurn()) return;
             if (this.game.aimingState.active) return;
+            if (this.game.heatEngineAiming.active) return;
             if (this.game.targetingState.active) return;
             if (this.game.turnPhase !== 'play') return;
             // 只能操作当前回合玩家的手牌
@@ -175,9 +176,7 @@ const GameUI = {
                 const index = parseInt(card.dataset.index);
                 const currentPlayer = this.game.players[this.game.currentPlayerIndex];
                 const result = this.game.playCard(currentPlayer.id, index);
-                if (result) {
-                    this.updateUI();
-                }
+                this.handlePlayCardResult(result);
             }
         });
 
@@ -316,9 +315,24 @@ const GameUI = {
                 if (cardEl && cardEl.classList.contains('disabled')) return;
                 e.preventDefault();
                 const result = this.game.playCard(currentPlayer.id, index);
-                if (result) this.updateUI();
+                this.handlePlayCardResult(result);
             }
         });
+    },
+
+    // 出牌结果统一处理：量子叠加等已在 playCard 内推进回合时，需补发牌/切视角/阶段流转
+    handlePlayCardResult(result) {
+        if (!result) return;
+        if (result === 'end_turn') {
+            if (this.game.isNewRound) {
+                this.game.drawCardsForAllPlayers();
+            }
+            this.viewingTab = this.game.currentPlayerIndex;
+            this.updateUI();
+            this.handleCurrentPhase();
+            return;
+        }
+        this.updateUI();
     },
 
     cancelActiveAction() {
